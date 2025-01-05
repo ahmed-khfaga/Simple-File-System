@@ -1,0 +1,170 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\3th sem\\OS_Project\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|D:\\3th sem\\OS_Project\\os_simple_shell\\parserclass.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|solutionrelative:os_simple_shell\\parserclass.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|D:\\3th sem\\OS_Project\\os_simple_shell\\file_entry.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|solutionrelative:os_simple_shell\\file_entry.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|D:\\3th sem\\OS_Project\\os_simple_shell\\directory_entry.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|solutionrelative:os_simple_shell\\directory_entry.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|D:\\3th sem\\OS_Project\\os_simple_shell\\directory.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|solutionrelative:os_simple_shell\\directory.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|D:\\3th sem\\OS_Project\\os_simple_shell\\command_line.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|solutionrelative:os_simple_shell\\command_line.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|d:\\3th sem\\os_project\\os_simple_shell\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|solutionrelative:os_simple_shell\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|D:\\3th sem\\OS_Project\\os_simple_shell\\virtual_disk.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|solutionrelative:os_simple_shell\\virtual_disk.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|D:\\3th sem\\OS_Project\\os_simple_shell\\mini_fat.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|solutionrelative:os_simple_shell\\mini_fat.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|D:\\3th sem\\OS_Project\\os_simple_shell\\converter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4BACD339-A450-443E-882A-49D6D37C8954}|OS_Simple_Shell\\OS_Simple_Shell.csproj|solutionrelative:os_simple_shell\\converter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "ParserClass.cs",
+              "DocumentMoniker": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\ParserClass.cs",
+              "RelativeDocumentMoniker": "OS_Simple_Shell\\ParserClass.cs",
+              "ToolTip": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\ParserClass.cs",
+              "RelativeToolTip": "OS_Simple_Shell\\ParserClass.cs",
+              "ViewState": "AQIAAMwAAAAAAAAAAAAtwPEDAAAZAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-05T04:24:59.075Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "Command_Line.cs",
+              "DocumentMoniker": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Command_Line.cs",
+              "RelativeDocumentMoniker": "OS_Simple_Shell\\Command_Line.cs",
+              "ToolTip": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Command_Line.cs",
+              "RelativeToolTip": "OS_Simple_Shell\\Command_Line.cs",
+              "ViewState": "AQIAADcBAAAAAAAAAAAAAGIBAAAUAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-05T04:23:37.75Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "File_Entry.cs",
+              "DocumentMoniker": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\File_Entry.cs",
+              "RelativeDocumentMoniker": "OS_Simple_Shell\\File_Entry.cs",
+              "ToolTip": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\File_Entry.cs",
+              "RelativeToolTip": "OS_Simple_Shell\\File_Entry.cs",
+              "ViewState": "AQIAAB4AAAAAAAAAAAAnwHMAAAAIAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-05T04:21:48.466Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Directory.cs",
+              "DocumentMoniker": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Directory.cs",
+              "RelativeDocumentMoniker": "OS_Simple_Shell\\Directory.cs",
+              "ToolTip": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Directory.cs",
+              "RelativeToolTip": "OS_Simple_Shell\\Directory.cs",
+              "ViewState": "AQIAAHAAAAAAAAAAAAArwLwAAAAIAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-05T04:19:09.105Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Directory_Entry.cs",
+              "DocumentMoniker": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Directory_Entry.cs",
+              "RelativeDocumentMoniker": "OS_Simple_Shell\\Directory_Entry.cs",
+              "ToolTip": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Directory_Entry.cs",
+              "RelativeToolTip": "OS_Simple_Shell\\Directory_Entry.cs",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAAAoAAAAIAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-05T04:17:18.631Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "Converter.cs",
+              "DocumentMoniker": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Converter.cs",
+              "RelativeDocumentMoniker": "OS_Simple_Shell\\Converter.cs",
+              "ToolTip": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Converter.cs",
+              "RelativeToolTip": "OS_Simple_Shell\\Converter.cs",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAAA4AAAAxAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-05T04:15:58.09Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "Mini_FAT.cs",
+              "DocumentMoniker": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Mini_FAT.cs",
+              "RelativeDocumentMoniker": "OS_Simple_Shell\\Mini_FAT.cs",
+              "ToolTip": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Mini_FAT.cs",
+              "RelativeToolTip": "OS_Simple_Shell\\Mini_FAT.cs",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAAGUAAABCAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-05T04:14:54.876Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "Virtual_Disk.cs",
+              "DocumentMoniker": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Virtual_Disk.cs",
+              "RelativeDocumentMoniker": "OS_Simple_Shell\\Virtual_Disk.cs",
+              "ToolTip": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Virtual_Disk.cs",
+              "RelativeToolTip": "OS_Simple_Shell\\Virtual_Disk.cs",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAABAAAAAAAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-05T04:13:49.901Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "Program.cs",
+              "DocumentMoniker": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Program.cs",
+              "RelativeDocumentMoniker": "OS_Simple_Shell\\Program.cs",
+              "ToolTip": "D:\\3th sem\\OS_Project\\OS_Simple_Shell\\Program.cs",
+              "RelativeToolTip": "OS_Simple_Shell\\Program.cs",
+              "ViewState": "AQIAAAAAAABAMzMzM5MwwAwAAAApAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-01-05T04:12:21.497Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
