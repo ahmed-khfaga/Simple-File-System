@@ -421,57 +421,98 @@ namespace OS_Simple_Shell
                 Dir(name);
             }
         }//dir       
-        public static void Rename(string oldname, string newname)
+        public static void Rename(string _oldName, string _newName)
         {
-            if (string.IsNullOrWhiteSpace(oldname) || string.IsNullOrWhiteSpace(newname)) // check if user don't input name old directory or name new directory
+            if (_newName.Contains("\\"))
             {
-                Console.WriteLine("Error: Invalid syntax. Correct usage: rename [fileName] [new fileName]");
+                Console.WriteLine("Error: the new file name should be a file name only you cannot provide a full path!");
                 return;
             }
-            if (newname.Contains("\\")) // if full path new name so print error new name can't be full path 
+            if (_oldName.Contains("\\"))
             {
-                Console.WriteLine("Error: The new file name should be a file name only you can't provide a full path.");
-                return;
-            }
-            Directory targetDirectory;
-            string oldFileName = oldname;
-            if (oldname.Contains("\\") && oldname.Contains(".")) // if 
-            {
-                string path = oldname.Substring(0, oldname.LastIndexOf('\\'));
-                oldFileName = oldname.Substring(oldname.LastIndexOf('\\') + 1);
-                targetDirectory = ParserClass.MoveToDir(path, Program.currentDirectory);
-                if (targetDirectory == null)
+                if (_oldName.Contains(".")) // to ensure this is file 
                 {
-                    Console.WriteLine($"this path \"{oldname}\" does not exist on your disk!");
+                    File_Entry file = MoveToFile(_oldName);
+                    if (file == null) // file not found
+                    {
+                        Console.WriteLine($"this file: \"{_oldName}\" does not exist on your disk!");
+                        return;
+                    }
+                    else // file found 
+                    {
+                        // we need to get directory of this file
+                        int lastSlashIndex = _oldName.LastIndexOf('\\');
+                        string name_of_Directory = _oldName.Substring(0, lastSlashIndex);
+                        string[] pathParts = _oldName.Split('\\'); // Split the path (extract name & size)
+                        string fileName = pathParts[pathParts.Length - 1]; // ppp.txt 
+                        Directory d = MoveToDir(name_of_Directory, Program.currentDirectory);
+                        int index_new_file = d.search_Directory(_newName);
+                        int index_old_file = d.search_Directory(fileName); // we need index of old file 
+                        if (index_new_file != -1) // this file found
+                        {
+                            Console.WriteLine("Error: A duplicate file name exists!");
+                            return;
+                        }
+                        else // file not found 
+                        {
+                            if (_newName.Contains("."))
+                            {
+                                Directory_Entry e = d.DirectoryTable[index_old_file];
+                                e.Dir_Namee = _newName.ToCharArray();
+                                d.Write_Directory();
+                                File_Entry f = new File_Entry(e, d);
+                                f.Read_File_Content();
+                                f.Write_File_Content();
+                                d.Write_Directory();
+                                return;
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Error : new file name \"{_newName}\" should have \".txt\" in last name!");
+                                return;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"Error : this path \"{_oldName}\" is a Directory");
                     return;
                 }
             }
-            else
+            int index_old = Program.currentDirectory.search_Directory(_oldName);
+            int index_new = Program.currentDirectory.search_Directory(_newName);
+            if (index_old == -1) // file not found
             {
-                //targetDirectory = Program.currentDirectory;
-                Console.WriteLine($"Error : this path \"{oldname}\" is a Directory!");
+                Console.WriteLine($"this file: \"{_oldName}\" does not exist on your disk!");
                 return;
             }
-            int index_oldName = targetDirectory.search_Directory(oldFileName);
-            if (index_oldName == -1)
+            else // file found 
             {
-                Console.WriteLine($"this file \"{oldname}\" does not exist on your disk!");
-                return;
+                Directory_Entry entry = Program.currentDirectory.DirectoryTable[index_old];
+                if (index_new != -1) // new file is found 
+                {
+                    Console.WriteLine("Error: A duplicate file name exists!");
+                    return;
+                }
+                if (entry.dir_Attr == 0x0) // file 
+                {
+                    if (_newName.Contains("."))
+                    {
+                        entry.Dir_Namee = _newName.ToCharArray();
+                        Program.currentDirectory.Write_Directory();
+                        File_Entry file = new File_Entry(entry, Program.currentDirectory);
+                        file.Read_File_Content();
+                        file.Write_File_Content();
+                        Program.currentDirectory.Write_Directory();
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Error : new file name \"{_newName}\" should have \".txt\" in last name!");
+                        return;
+                    }
+                }
             }
-            if (targetDirectory.DirectoryTable[index_oldName].dir_Attr == 0x10)
-            {
-                Console.WriteLine("Error : can't rename Directory!");
-                return;
-            }
-            int index_newName = targetDirectory.search_Directory(newname);
-            if (index_newName != -1)
-            {
-                Console.WriteLine("Error: A duplicate file name exists!");
-                return;
-            }
-            Directory_Entry entry = targetDirectory.DirectoryTable[index_oldName];
-            entry.Dir_Namee = newname.PadRight(11, '\0').ToCharArray();
-            targetDirectory.Write_Directory();
         }
         public static void Make_Directory2(string name)
         {

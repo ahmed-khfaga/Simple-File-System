@@ -319,7 +319,15 @@ namespace OS_Simple_Shell
             else if (commandArray_2Agr[0].ToLower() == "rename")
             {
 
-                ParserClass.Rename(commandArray_2Agr[1], commandArray_2Agr[2]);
+                if (commandArray_2Agr[1] == "" || commandArray_2Agr[2] == "")
+                {
+                    Console.WriteLine("Error :\n-Renames a file. \r\nrename command syntax is \r\nrename [fileName] [new fileName] \r\n[fileName] can be a file name or fullpath of a filename \r\n[new fileName] can be a new file name not fullpath");
+                    return;
+                }
+                else
+                {
+                    ParserClass.Rename(commandArray_2Agr[1], commandArray_2Agr[2]);
+                }
             }
             // work          
             else if (commandArray_2Agr[0].ToLower() == "import")
