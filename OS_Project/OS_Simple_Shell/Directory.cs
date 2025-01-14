@@ -109,6 +109,7 @@ namespace OS_Simple_Shell
                     cluster_Index = next;
                     if (cluster_Index != -1)
                     {
+                        ls.AddRange(Virtual_Disk.read_Cluster(cluster_Index));
                         next = Mini_FAT.getNext(cluster_Index);
                     }
                 } while (next != -1);
