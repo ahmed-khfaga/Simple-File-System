@@ -175,11 +175,25 @@ namespace OS_Simple_Shell
             }
             else if (commandArray_2Agr[0].ToLower() == "cls")
             {
-                Console.WriteLine("Error : cls command syntax is \n cls \n function: Clear the screen");
+                if (commandArray_2Agr[1].ToLower() == string.Empty)
+                {
+                    Console.Clear();
+                }
+                else
+                {
+                    Console.WriteLine("Error : cls command syntax is \n cls \n function: Clear the screen");
+                }
             }
             else if (commandArray_2Agr[0].ToLower() == "quit")
             {
-                Console.WriteLine("Error : quit command syntax is \n quit \n function: Quit the shell");
+                if (commandArray_2Agr[1].ToLower() == string.Empty)
+                {
+                    Environment.Exit(0);
+                }
+                else
+                {
+                    Console.WriteLine("Error : quit command syntax is \n quit \n function: Quit the shell");
+                }
             }
             // dir fullpath done with all test case            
             else if (commandArray_2Agr[0].ToLower() == "dir")
@@ -274,19 +288,17 @@ namespace OS_Simple_Shell
                 {
                     dirName = dirName.Trim('"');
                 }
-                if (prohibitedChars.Contains(dirName[0]))
-                {
-                    Console.WriteLine($"Error: Directory name cannot start with \"{dirName[0]}\". Please enter a valid name.");
-                    return;
-                }
-
                 if (commandArray_2Agr.Length < 2 || string.IsNullOrWhiteSpace(dirName) || dirName == "." || dirName.ToLower().Contains("."))
                 {
                     Console.WriteLine("Error : md command syntax is \n md [directory] \n[directory] can be a new directory name or fullpath of a new directory\nCreates a directory.");
                     return;
                 }
-
-                ParserClass.Make_Directory2(dirName);
+                if (prohibitedChars.Contains(dirName[0]))
+                {
+                    Console.WriteLine($"Error: Directory name cannot start with \"{dirName[0]}\". Please enter a valid name.");
+                    return;
+                }              
+                ParserClass.Make_Directory(dirName);
             }
             // work
             else if (commandArray_2Agr[0].ToLower() == "rd")
@@ -313,12 +325,11 @@ namespace OS_Simple_Shell
             {
                 if (commandArray_2Agr[1].ToLower() == "")
                     return;
-                ParserClass.ChangeDirectory(commandArray_2Agr[1]);
+                ParserClass.ChangeDirectory_v2(commandArray_2Agr[1]);
             }
             // work
             else if (commandArray_2Agr[0].ToLower() == "rename")
             {
-
                 if (commandArray_2Agr[1] == "" || commandArray_2Agr[2] == "")
                 {
                     Console.WriteLine("Error :\n-Renames a file. \r\nrename command syntax is \r\nrename [fileName] [new fileName] \r\n[fileName] can be a file name or fullpath of a filename \r\n[new fileName] can be a new file name not fullpath");
@@ -343,7 +354,7 @@ namespace OS_Simple_Shell
                 }
                 else
                 {
-                    ParserClass.Importv2(commandArray_2Agr[1], commandArray_2Agr[2]);
+                    ParserClass.ImportMethod(commandArray_2Agr[1], commandArray_2Agr[2]);
                 }
             }
             // work
@@ -356,11 +367,11 @@ namespace OS_Simple_Shell
                 }
                 if (commandArray_2Agr.Length == 2)
                 {
-                    ParserClass.Export(commandArray_2Agr[1]);
+                    ParserClass.Export_Files(commandArray_2Agr[1]);
                 }
                 else
                 {
-                    ParserClass.Export(commandArray_2Agr[1], commandArray_2Agr[2]);
+                    ParserClass.Export_Files(commandArray_2Agr[1], commandArray_2Agr[2]);
                 }
             }
             //del work done all test case
@@ -376,7 +387,7 @@ namespace OS_Simple_Shell
                     {
                         continue;
                     }
-                    ParserClass.del(commandArray_2Agr[i]);
+                    ParserClass.deleteFile(commandArray_2Agr[i]);
                 }
             }
             // work done all test case
@@ -391,7 +402,7 @@ namespace OS_Simple_Shell
                     }
                     else
                     {
-                        ParserClass.Type(commandArray_2Agr[1]);
+                        ParserClass.TypeFiles(commandArray_2Agr[1]);
                     }
                 }
                 else
@@ -402,13 +413,13 @@ namespace OS_Simple_Shell
                         {
                             continue;
                         }
-                        ParserClass.Type(commandArray_2Agr[i]);
+                        ParserClass.TypeFiles(commandArray_2Agr[i]);
                     }
                 }               
             }
             // work with all test case 
             else if (commandArray_2Agr[0].ToLower() == "copy")
-            {
+            {                
                 if (commandArray_2Agr[1].ToLower() == "")
                 {
                     Console.WriteLine("ERROR:\nCopies one or more files to another location. \r\ncopy command syntax is \r\n copy [source] \r\nor \r\n copy [source] [destination] \r\n[source] can be file Name (or fullpath of file) or directory \r\nName (or fullpath of directory) \r\n[destination] can be file Name (or fullpath of file) or \r\ndirectory name or fullpath of a directory ");
@@ -416,11 +427,11 @@ namespace OS_Simple_Shell
                 }
                 if (commandArray_2Agr.Length == 2)
                 {
-                    ParserClass.Copy(commandArray_2Agr[1]);
+                    ParserClass.Copy_Source(commandArray_2Agr[1]);
                 }
                 else
                 {
-                    ParserClass.Copy(commandArray_2Agr[1], commandArray_2Agr[2]);
+                    ParserClass.CopyMethod(commandArray_2Agr[1], commandArray_2Agr[2]);
                 }
             }
 

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -24,11 +26,9 @@ namespace OS_Simple_Shell
             }
             this.content = "";
             dir_FileSize = d.dir_FileSize;
-            string content = this.content;
             if (pa != null)
                 this.parent = pa;
         }
-
         public int Get_My_Size_On_Disk()
         {
             int size = 0;
@@ -46,7 +46,6 @@ namespace OS_Simple_Shell
             }
             return size;
         }
-
         public Directory_Entry GetDirectory_Entry()
         {
             Directory_Entry m = new Directory_Entry(Dir_Namee, dir_Attr, dir_First_Cluster);
@@ -58,7 +57,6 @@ namespace OS_Simple_Shell
 
             return m;
         }
-
         public void Write_File_Content()
         {
             Directory_Entry o = GetDirectory_Entry();
@@ -111,7 +109,6 @@ namespace OS_Simple_Shell
             }
             Mini_FAT.write_FAT();
         }
-
         public void Read_File_Content()
         {
             if (dir_First_Cluster != 0)
@@ -139,7 +136,7 @@ namespace OS_Simple_Shell
                 int next = Mini_FAT.getNext(clusterIndex);
                 do
                 {
-                    Virtual_Disk.write_Cluster(new byte[1024], clusterIndex);
+                    //Virtual_Disk.write_Cluster(new byte[1024], clusterIndex);
 
                     Mini_FAT.setNext(clusterIndex, 0);
                     clusterIndex = next;
@@ -165,10 +162,326 @@ namespace OS_Simple_Shell
                 }
             }
             Mini_FAT.write_FAT();
-        }      
+        }
+        public static void Copy_CreateFile(File_Entry file_path, string name)
+        {
+            if (name.Contains("\\") && name.Contains("."))
+            {
+                int last_index_for_name = name.LastIndexOf("\\");
+                string name_of_Directory = name.Substring(0, last_index_for_name); // get fullpath of parent of this file 
+                Directory targetDirectory = ParserClass.MoveToDir(name_of_Directory, Program.currentDirectory); // move to this directory
+                string name_Of_File = name.Substring(last_index_for_name + 1); // get name of File 
+                if (targetDirectory == null) // this is mean directory is null and path is error
+                {
+                    Console.WriteLine($"this path \"{name}\" does not exist on your disk!");
+                    return;
+                }
+                else // we found this directory 
+                {
+                    file_path.Read_File_Content(); // read content of this file to ensure we get the content and convert it from byte to string .
+                    int first_Cluster = Mini_FAT.get_Availabel_Cluster(); // get free cluster to this file we want to copy it.
+                    int counter = 0; // counter to count file are copied .
+                    File_Entry File_are_copied = new File_Entry(name_Of_File.ToCharArray(), file_path.dir_Attr, first_Cluster, file_path.dir_FileSize, targetDirectory, file_path.content); // this is File are Copied .
+                    File_are_copied.Write_File_Content(); // write this file and ensure FAT table save this data .
+                    targetDirectory.DirectoryTable.Add(File_are_copied); // add this file in Directoy Table .
+                    counter++;
+                    targetDirectory.Write_Directory();
+                    Console.WriteLine($"{new string(targetDirectory.Dir_Namee)+"\\"+name_Of_File}");
+                    Console.WriteLine($"{counter} file(s) copied.");
+
+                }
+            }
+            else if(!name.Contains("."))
+            {
+                 // get fullpath of parent of this file 
+                Directory targetDirectory = ParserClass.MoveToDir(name, Program.currentDirectory); // move to this directory
+                if (targetDirectory == null) // this is mean directory is null and path is error
+                {
+                    Console.WriteLine($"this path \"{name}\" does not exist on your disk!");
+                    return;
+                }
+                else // we found this directory 
+                {
+                    file_path.Read_File_Content(); // read content of this file to ensure we get the content and convert it from byte to string .
+                    int first_Cluster = Mini_FAT.get_Availabel_Cluster(); // get free cluster to this file we want to copy it.
+                    int counter = 0; // counter to count file are copied .
+                    File_Entry File_are_copied = new File_Entry(file_path.Dir_Namee, file_path.dir_Attr, first_Cluster, file_path.dir_FileSize, targetDirectory, file_path.content); // this is File are Copied .
+                    File_are_copied.Write_File_Content(); // write this file and ensure FAT table save this data .
+                    targetDirectory.DirectoryTable.Add(File_are_copied); // add this file in Directoy Table .
+                    counter++;
+                    targetDirectory.Write_Directory();
+                    Console.WriteLine($"{counter} file(s) copied.");
+
+                }
+            }
+            else if(name.Contains("."))
+            {
+                file_path.Read_File_Content();
+                int first_Cluster = Mini_FAT.get_Availabel_Cluster(); // get free cluster to this file we want to copy it.
+                int counter = 0; // counter to count file are copied .
+                File_Entry File_are_copied = new File_Entry(name.ToCharArray(), file_path.dir_Attr, first_Cluster, file_path.dir_FileSize, Program.currentDirectory, file_path.content); // this is File are Copied .
+                File_are_copied.Write_File_Content(); // write this file and ensure FAT table save this data .
+                Program.currentDirectory.DirectoryTable.Add(File_are_copied); // add this file in Directoy Table .
+                counter++;
+                Program.currentDirectory.Write_Directory();
+                Console.WriteLine($"{counter} file(s) copied.");
+            }          
+        }
+       
+        public static File_Entry OverWrite(File_Entry file, string destinationFileName, string destinationPath)
+        {
+            Directory targetDirectory;
+            File_Entry file_OverWriteed;
+            if (destinationPath.Contains(".") && destinationPath.Contains("\\")) // if we go to fullpath to file 
+            {
+                int last_index_for_name_Dir = destinationPath.LastIndexOf("\\");
+
+                string name_Of_Dir = destinationPath.Substring(0, last_index_for_name_Dir);
+                targetDirectory = ParserClass.MoveToDir(name_Of_Dir, Program.currentDirectory);
+                file.Read_File_Content();
+                int index = targetDirectory.search_Directory(destinationFileName);
+
+                Console.WriteLine($"this file \"{destinationFileName}\" is already exist on your disk!");
+                Console.WriteLine($"NOTE: Do you want to overwrite this file \"{destinationFileName}\"? Please enter y for Yes or n for No!");
+                int first_Cluster = targetDirectory.DirectoryTable[index].dir_First_Cluster;
+                int file_Size = targetDirectory.DirectoryTable[index].dir_FileSize;
+                file_OverWriteed = new File_Entry(destinationFileName.ToCharArray(), 0x0, first_Cluster, file_Size, Program.currentDirectory, "");
+                int counter = 0;
+                string answer = Console.ReadLine();
+                while (answer != "y" || answer != "n")
+                {
+                    if (answer == "y")
+                    {
+                        file_OverWriteed.content = file.content;
+                        file_OverWriteed.dir_FileSize = file.dir_FileSize;
+                        file_OverWriteed.Write_File_Content();
+                        counter++;
+                        Console.WriteLine($"{counter} file(s) copied.");
+                        break;
+                    }
+                    else if (answer == "n")
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"NOTE : do you want to overwrite this file \"{destinationFileName}\" , please enter y for Yes n for No!");
+                        answer = Console.ReadLine();
+                    }
+                }
+                return file_OverWriteed;
+            }
+            else if (destinationPath.Contains("\\") && !destinationPath.Contains("."))
+            {
+                targetDirectory = ParserClass.MoveToDir(destinationPath, Program.currentDirectory);
+                file.Read_File_Content();
+                int index = targetDirectory.search_Directory(destinationFileName);
+
+                Console.WriteLine($"this file \"{destinationFileName}\" is already exist on your disk!");
+                Console.WriteLine($"NOTE: Do you want to overwrite this file \"{destinationFileName}\"? Please enter y for Yes or n for No!");
+                int first_Cluster = targetDirectory.DirectoryTable[index].dir_First_Cluster;
+                int file_Size = targetDirectory.DirectoryTable[index].dir_FileSize;
+                file_OverWriteed = new File_Entry(destinationFileName.ToCharArray(), 0x0, first_Cluster, file_Size, Program.currentDirectory, "");
+                int counter = 0;
+                string answer = Console.ReadLine();
+                while (answer != "y" || answer != "n")
+                {
+                    if (answer == "y")
+                    {
+                        file_OverWriteed.content = file.content;
+                        file_OverWriteed.dir_FileSize = file.dir_FileSize;
+                        file_OverWriteed.Write_File_Content();
+                        counter++;
+                        Console.WriteLine($"{counter} file(s) copied.");
+                        break;
+                    }
+                    else if (answer == "n")
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"NOTE : do you want to overwrite this file \"{destinationFileName}\" , please enter y for Yes n for No!");
+                        answer = Console.ReadLine();
+                    }
+                }
+                return file_OverWriteed;
+            }
+            else if (destinationFileName.Contains("."))
+            {
+                file.Read_File_Content();
+                int index = Program.currentDirectory.search_Directory(destinationFileName);
+                Console.WriteLine($"this file \"{destinationFileName}\" is already exist on your disk!");
+                Console.WriteLine($"NOTE: Do you want to overwrite this file \"{destinationFileName}\"? Please enter y for Yes or n for No!");
+                int first_Cluster = Program.currentDirectory.DirectoryTable[index].dir_First_Cluster;
+                int file_Size = Program.currentDirectory.DirectoryTable[index].dir_FileSize;
+                file_OverWriteed = new File_Entry(destinationFileName.ToCharArray(), 0x0, first_Cluster, file_Size, Program.currentDirectory, "");
+                int counter = 0;
+                string answer = Console.ReadLine();
+                while (answer != "y" || answer != "n")
+                {
+                    if (answer == "y")
+                    {
+                        file_OverWriteed.content = file.content;
+                        file_OverWriteed.dir_FileSize = file.dir_FileSize;
+                        file_OverWriteed.Write_File_Content();
+                        counter++;
+                        Console.WriteLine($"{counter} file(s) copied.");
+                        break;
+                    }
+                    else if (answer == "n")
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"NOTE : do you want to overwrite this file \"{destinationFileName}\" , please enter y for Yes n for No!");
+                        answer = Console.ReadLine();
+                    }
+                }
+                return file_OverWriteed;
+            }
+            else // for only directory 
+            {
+                targetDirectory = ParserClass.MoveToDir(destinationPath, Program.currentDirectory);
+                file.Read_File_Content();
+                int index = targetDirectory.search_Directory(destinationFileName);
+                Console.WriteLine($"this file \"{destinationFileName}\" is already exist on your disk!");
+                Console.WriteLine($"NOTE: Do you want to overwrite this file \"{destinationFileName}\"? Please enter y for Yes or n for No!");
+                int first_Cluster = Program.currentDirectory.DirectoryTable[index].dir_First_Cluster;
+                int file_Size = Program.currentDirectory.DirectoryTable[index].dir_FileSize;
+                file_OverWriteed = new File_Entry(destinationFileName.ToCharArray(), 0x0, first_Cluster, file_Size, Program.currentDirectory, "");
+                int counter = 0;
+                string answer = Console.ReadLine();
+                while (answer != "y" || answer != "n")
+                {
+                    if (answer == "y")
+                    {
+                        file_OverWriteed.content = file.content;
+                        file_OverWriteed.dir_FileSize = file.dir_FileSize;
+                        file_OverWriteed.Write_File_Content();
+                        counter++;
+                        Console.WriteLine($"{counter} file(s) copied.");
+                        break;
+                    }
+                    else if (answer == "n")
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"NOTE : do you want to overwrite this file \"{destinationFileName}\" , please enter y for Yes n for No!");
+                        answer = Console.ReadLine();
+                    }
+                }
+                return file_OverWriteed;
+
+            }           
+        }
+        public static bool CheckerMethod(string physical_DISK)
+        {
+            if (physical_DISK.Contains("\\") && physical_DISK.Contains("."))
+            {               
+                int last_Index_For_Directory_In_Physical = physical_DISK.LastIndexOf("\\");
+                string name_Of_Directory_In_Physical = physical_DISK.Substring(0, last_Index_For_Directory_In_Physical);
+                if (System.IO.Directory.Exists(name_Of_Directory_In_Physical))
+                {                    
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }            
+            else
+            {
+                return false ;
+            }
+        }
+        public static void helpermethod_Exported_In_Your_Disk(File_Entry file, string physical_DISK)
+        {
+            if (physical_DISK.Contains("\\") && physical_DISK.Contains("."))
+            {
+                file.Read_File_Content();
+                string[] pathParts = physical_DISK.Split('\\'); // Split the path (extract name & size)
+                int last_Index_For_Directory_In_Physical = physical_DISK.LastIndexOf("\\");
+                string name_Of_Directory_In_Physical = physical_DISK.Substring(0, last_Index_For_Directory_In_Physical);
+                string name_of_File = pathParts[pathParts.Length - 1]; // get name of File 
+                file.Dir_Namee = name_of_File.ToCharArray();
+                string content = file.content.Replace("\0", " ").Trim();
+                if (System.IO.Directory.Exists(name_Of_Directory_In_Physical))
+                {
+                    using (StreamWriter sw = new StreamWriter(name_Of_Directory_In_Physical + "\\" + name_of_File))
+                    {
+                        sw.WriteLine(content);
+                    }
+                    return;
+                }
+                else
+                {
+                    return ;
+                }
+            }
+            else if (physical_DISK.Contains("\\") && !physical_DISK.Contains("."))
+            {
+                string file_Name = new string(file.Dir_Namee).Replace("\0", " ").Trim();
+                file.Read_File_Content();
+                string content = (file.content).Replace("\0", " ").Trim();                
+                if (System.IO.Directory.Exists(physical_DISK))
+                {
+                    using (StreamWriter sw = new StreamWriter(physical_DISK + "\\" + file_Name))
+                    {
+                        sw.WriteLine(content);
+                    }
+                    return;
+                }
+                else
+                {
+                    return ;
+                }
+            }
+            return ;
+        }
+        public static void helpermethod_Exported_In_EXE_File(File_Entry file, string name)
+        {
+            int counter = 0;
+            file.Read_File_Content();
+            string name_File = new string(file.Dir_Namee).Trim('\0');
+            string exportedPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, name_File);
+            string content = file.content;
+            if (content.Contains("\0"))
+            {
+                content = content.Replace("\0", " ");
+            }
+            content = content.Trim();
+            File.WriteAllText(exportedPath, content);
+            counter++;
+            string[] pathParts = name.Split('\\'); // Split the path (extract name & size)
+            string name_of_File;
+            string name_Parent_Of_File;
+            string fullpath_File_Exported;
+            if (pathParts.Length > 2)
+            {
+                name_of_File = pathParts[pathParts.Length - 1]; // get name of File 
+                name_Parent_Of_File = pathParts[pathParts.Length - 2]; // get parent directory of this File 
+                fullpath_File_Exported = name_Parent_Of_File + "\\" + name_of_File;
+                Console.WriteLine($"{fullpath_File_Exported}");
+                Console.WriteLine($"\t{counter} file(s) exported.");
+                return;
+            }
+            else
+            {
+                name_of_File = name;
+                name_Parent_Of_File = new string(Program.currentDirectory.Dir_Namee).Trim('\0');
+                fullpath_File_Exported = name_Parent_Of_File + "\\" + name_of_File;
+                Console.WriteLine($"{fullpath_File_Exported}");
+                Console.WriteLine($"\t{counter} file(s) exported.");
+                return;
+            }
+        }
         public void Print_Content()
         {
-            Console.Write($" \n {Dir_Namee} \n\n {content} \n \n");
+            Console.Write($"\n{new string(Dir_Namee)}\n\n{content} \n \n");
 
         }
     }

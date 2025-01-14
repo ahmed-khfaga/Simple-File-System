@@ -2,14 +2,400 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace OS_Simple_Shell
 {
     internal class ParserClass
     {
-        // method dir to help me 
+        public static Directory MoveToDir(string fullPath, Directory currentDirectory)
+        {
+            string[] parts = fullPath.Split('\\');
+            if (parts.Length == 0)
+            {
+                return null;
+            }
+            Directory targetDirectory = currentDirectory;
+            string s = new string(currentDirectory.Dir_Namee);
+            if (s.Contains("\0"))
+                s = s.Replace("\0", " ");
+            s = s.Trim();
+            if (parts[0].Equals(s.Trim('\0'), StringComparison.OrdinalIgnoreCase))
+            {
+                parts = parts.Skip(1).ToArray();
+            }
+            foreach (var part in parts)
+            {
+                if (string.IsNullOrWhiteSpace(part))
+                {
+                    continue;
+                }
+                int index = targetDirectory.search_Directory(part);
+                if (index == -1)
+                {
+                    return null;
+                }
+                Directory_Entry entry = targetDirectory.DirectoryTable[index];
+                if ((entry.dir_Attr & 0x10) != 0x10)
+                {
+                    return null;
+                }
+                targetDirectory = new Directory(entry.Dir_Namee, entry.dir_Attr, entry.dir_First_Cluster, targetDirectory);
+                targetDirectory.Read_Directory();
+            }
+            return targetDirectory;
+        }        
+        public static File_Entry MoveToFile(string fullPath)
+        {
+            int lastSlashIndex = fullPath.LastIndexOf('\\');
+            if (lastSlashIndex == -1)
+            {
+                return null;
+            }
+            string fileName = fullPath.Substring(lastSlashIndex + 1); // Extract file name
+            string directoryPath = fullPath.Substring(0, lastSlashIndex); // Remove file name to get directory path
+            Directory parentDirectory = MoveToDir(directoryPath, Program.currentDirectory);
+            if (parentDirectory == null)
+            {
+                return null;
+            }
+            parentDirectory.Read_Directory();
+            int index = parentDirectory.search_Directory(fileName);
+            if (index == -1)
+            {
+                return null;
+            }
+            Directory_Entry fileEntry = parentDirectory.DirectoryTable[index];
+            File_Entry e = new File_Entry(fileEntry, Program.currentDirectory);
+            File_Entry file = new File_Entry(e.Dir_Namee, e.dir_Attr, e.dir_First_Cluster, e.dir_FileSize, parentDirectory, e.content);
+            return file;
+        }
+        private static bool ImportFileToDirectory(string fileName, string fileContent, Directory targetDirectory)
+        {
+            // Clean up content if necessary
+            if (fileContent.Contains("\0"))
+            {
+                fileContent = fileContent.Replace("\0", " ").Trim();
+            }
+            // Calculate file size and find an available cluster
+            int fileSize = fileContent.Length;
+            int firstCluster = Mini_FAT.get_Availabel_Cluster();
+            // Create File_Entry object
+            File_Entry importedFile = new File_Entry(fileName.ToCharArray(), 0x0, firstCluster, fileSize, targetDirectory, fileContent);
+            importedFile.Write_File_Content();
+            // Create a Directory_Entry and add to the directory table
+            Directory_Entry entry = new Directory_Entry(importedFile.Dir_Namee, importedFile.dir_Attr, importedFile.dir_First_Cluster, importedFile.dir_FileSize);
+            targetDirectory.DirectoryTable.Add(entry);
+            targetDirectory.Write_Directory();
+            // Update the parent directory content if applicable
+            if (targetDirectory.Parent != null)
+            {
+                targetDirectory.Update_Content(targetDirectory.Get_Directory_Entry(), targetDirectory.Parent.Get_Directory_Entry());
+            }
+            return true; // File successfully imported
+        }
+        private static void OverWrite_ImportedFiles(File_Entry file ,string fullpath, string filename)
+        {          
+            Console.WriteLine($"Error: A file is \"{filename}\" already exists on your disk!");
+            Console.WriteLine($"NOTE : do you want to overwrite this file: \"{filename}\" , please enter y for Yes n for No!");
+            string fileContent = System.IO.File.ReadAllText(fullpath);
+            if (fileContent.Contains("\0"))
+            {
+                fileContent = fileContent.Replace("\0", " ").Trim();
+            }
+            int size = fileContent.Length;
+            string answer = Console.ReadLine();
+            while (answer != "y" || answer != "n")
+            {
+                if (answer == "y")
+                {
+                    file.Read_File_Content();
+                    file.content = fileContent;
+                    file.dir_FileSize = size;
+                    file.Write_File_Content();
+                    return;
+                }
+                if (answer == "n")
+                {
+                    return;
+                }
+                else
+                {
+                    Console.WriteLine($"NOTE : do you want to overwrite this file: \"{fileContent}\" , please enter y for Yes n for No!");
+                    answer = Console.ReadLine();
+                }
+            }
+        }
+        private static bool ImportSingleFile(string filePath)
+        {
+            string[] pathParts = filePath.Split('\\');
+            string fileName = pathParts[pathParts.Length - 1]; // get name 
+            string fileContent = System.IO.File.ReadAllText(filePath);
+            if (fileContent.Contains("\0"))
+            {
+                fileContent = fileContent.Replace("\0", " ").Trim();
+            }
+            int size = fileContent.Length;
+            int index = Program.currentDirectory.search_Directory(fileName);
+            int first_Cluster = Mini_FAT.get_Availabel_Cluster();
+
+            if (index == -1) // file not found on my disk
+            {
+                File_Entry file_Imported = new File_Entry(fileName.ToCharArray(), 0, first_Cluster, size, Program.currentDirectory, fileContent);
+                file_Imported.Write_File_Content();
+                Directory_Entry entry = new Directory_Entry(fileName.ToCharArray(), 0x0, file_Imported.dir_First_Cluster, size);
+                Program.currentDirectory.DirectoryTable.Add(entry);
+                Program.currentDirectory.Write_Directory();
+
+                if (Program.currentDirectory.Parent != null)
+                {
+                    Program.currentDirectory.Update_Content(Program.currentDirectory.Get_Directory_Entry(), Program.currentDirectory.Parent.Get_Directory_Entry());
+                }
+                return true; // Successfully imported
+            }
+            else // file found so ask user if want overwrite 
+            {
+                Console.WriteLine($"Error: A file is \"{fileName}\" already exists on your disk!");
+                Console.WriteLine($"NOTE : do you want to overwrite this file: \"{fileName}\" , please enter y for Yes n for No!");
+                string answer = Console.ReadLine();
+                while (answer != "y" || answer != "n")
+                {
+                    if (answer == "y")
+                    {
+                        File_Entry File_OverWrited = new File_Entry(Program.currentDirectory.DirectoryTable[index], Program.currentDirectory);
+                        File_OverWrited.Read_File_Content();
+                        File_OverWrited.content = fileContent;
+                        File_OverWrited.dir_FileSize = size;
+                        File_OverWrited.Write_File_Content();
+                        return true;
+                    }
+                    if (answer == "n")
+                    {
+                        return false;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"NOTE : do you want to overwrite this file: \"{fileName}\" , please enter y for Yes n for No!");
+                        answer = Console.ReadLine();
+                    }
+                }
+                return false; // Import failed
+            }
+        }
+        public static void ImportMethod(string source , string destinition)
+        {
+            string fullpath;
+            int imported_Files = 0;
+            if (System.IO.Path.IsPathRooted(source))
+            {
+                fullpath = source; // It's an absolute path
+            }
+            else
+            {
+                fullpath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), source); // from .exe app 
+            }
+
+            if(!System.IO.File.Exists(fullpath)) // check if source file is exist or not 
+            {
+                Console.WriteLine($"Error this path :{source} does not exist on your Computer!");
+                return;
+            }
+            else // this file is found 
+            {
+                if (destinition.Contains("\\") && destinition.Contains(".")) // this is fullpath to file 
+                {
+                    File_Entry file = MoveToFile(destinition);
+                    if (file == null) // this mean file not found so import it 
+                    {
+                        string[] pathParts = destinition.Split('\\'); // Split the path (extract name & size)
+                        string file_Name = pathParts[pathParts.Length - 1]; // get file name 
+                        string parent_Directory_Of_File = pathParts[pathParts.Length - 2];
+                        string file_Content = System.IO.File.ReadAllText(fullpath); // get content of this file 
+
+                        Directory targetDirectory = MoveToDir(parent_Directory_Of_File, Program.currentDirectory);
+                        if (ImportFileToDirectory(file_Name, file_Content, targetDirectory))
+                        {
+                            imported_Files++;
+                            Console.WriteLine($"{source}");
+                            Console.WriteLine($"\t{imported_Files} file(s) imported.");
+                        }
+                        else
+                        {
+                            return;
+                        }
+                    }
+                    else // file is found so ask user if want to overwrite or not 
+                    {
+                        string[] pathParts = destinition.Split('\\'); // Split the path (extract name & size)
+                        string file_Name = pathParts[pathParts.Length - 1]; // get file name 
+                        OverWrite_ImportedFiles(file, fullpath, file_Name);
+                        return;
+                        // ............
+                    }
+                }
+                else if (!destinition.Contains("\\") && destinition.Contains(".")) // this is filename without fullpath
+                {
+                    File_Entry file = MoveToFile(destinition);
+                    if(file == null)
+                    {
+                        string file_Name = destinition; // get file name 
+                        string parent_Directory_Of_File = new string(Program.currentDirectory.Dir_Namee).Trim('\0');
+                        string file_Content = System.IO.File.ReadAllText(fullpath); // get content of this file 
+                        Directory targetDirectory = MoveToDir(parent_Directory_Of_File, Program.currentDirectory);
+                        if (ImportFileToDirectory(file_Name, file_Content, targetDirectory))
+                        {
+                            imported_Files++;
+                            Console.WriteLine($"{source}");
+                            Console.WriteLine($"\t{imported_Files} file(s) imported.");
+                        }
+                        else
+                        {
+                            return;
+                        }
+                    }
+                    else // this mean this file is found so ask user if want to overwrite
+                    {
+                        string file_Name = destinition; // get file name 
+
+                        OverWrite_ImportedFiles(file, fullpath, file_Name);
+                        return;
+                         // ...............
+                    }
+                }
+                else if(destinition.Contains("\\") && !destinition.Contains(".")) // this si full path to directory
+                {
+                    Directory targetDirectory = MoveToDir(destinition,Program.currentDirectory);
+                    if (targetDirectory == null) // this is mean directory is not found 
+                    {
+                        Console.WriteLine($"this path : \"{destinition}\" does not exist on your disk!");
+                        return;
+                    }
+                    else // this directory is found 
+                    {
+                        // in this directory wee need to check if this file is found in thid directory or not 
+                        string fileName = fullpath.Substring(fullpath.LastIndexOf("\\") + 1);
+                        int index = targetDirectory.search_Directory(fileName);
+                        if(index == -1) // this mean this file does not exist 
+                        {
+                            string file_Content = File.ReadAllText(fullpath);
+                            if (ImportFileToDirectory(fileName, file_Content, targetDirectory))
+                            {
+                                imported_Files++;
+                                Console.WriteLine($"{source}");
+                                Console.WriteLine($"\t{imported_Files} file(s) imported.");
+                            }
+                            else
+                            {
+                                return;
+                            }
+                        }
+                        else // this file is already exist so ask use if want to overwrite or not 
+                        {
+                            Directory_Entry entry = targetDirectory.DirectoryTable[index];
+                            File_Entry file = new File_Entry(entry, targetDirectory);
+                            OverWrite_ImportedFiles(file, fullpath, fileName);
+                            return;
+                        }                        
+                    }
+                }
+                else // this mean this is directory without fullpath
+                {
+                    Directory targetDirectory = MoveToDir (destinition,Program.currentDirectory);
+                    if (targetDirectory == null) // this directory not found 
+                    {
+                        Console.WriteLine($"this path : \"{destinition}\" does not exist on your disk!");
+                        return;
+                    }
+                    else
+                    {
+                        string fileName = fullpath.Substring(fullpath.LastIndexOf("\\") + 1);
+                        int index = targetDirectory.search_Directory(fileName);
+                        if (index == -1) // this mean this file does not exist 
+                        {
+                            string file_Content = File.ReadAllText(fullpath);
+                            if (ImportFileToDirectory(fileName, file_Content, targetDirectory))
+                            {
+                                imported_Files++;
+                                Console.WriteLine($"{source}");
+                                Console.WriteLine($"\t{imported_Files} file(s) imported.");
+                            }
+                            else
+                            {
+                                return;
+                            }
+                        }
+                        else // this file is already exist so ask use if want to overwrite or not 
+                        {
+                            Directory_Entry entry = targetDirectory.DirectoryTable[index];
+                            File_Entry file = new File_Entry (entry, targetDirectory);
+                            OverWrite_ImportedFiles(file, fullpath, fileName);
+                            return;
+                        }
+                    }
+                }                
+            }
+        }
+        public static void Importv2(string path)
+        {
+            string fullPath;
+            int importedFileCount = 0; 
+            // Check if the provided path is absolute or relative file
+            if (System.IO.Path.IsPathRooted(path))
+            {
+                fullPath = path; // It's an path
+            }
+            else
+            {
+                // Combine relative file path with the current working directory
+                fullPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), path);
+            }
+            if (System.IO.File.Exists(fullPath)) // if path is only file 
+            {
+                // Import a single file
+                if (ImportSingleFile(fullPath))
+                {
+                    Console.WriteLine(fullPath);
+                    importedFileCount++;
+                    Console.WriteLine($"\t {importedFileCount} file(s) imported");
+                }
+            }
+            else if (System.IO.Directory.Exists(fullPath)) // Bounce
+            {
+                List<string> files = new List<string>();
+                // Import all .txt files in the directory
+                string[] textFiles = System.IO.Directory.GetFiles(fullPath, "*.txt");
+                if (textFiles.Length == 0)
+                {
+                    Console.WriteLine($"No text files found in the directory: \"{fullPath}\"");
+                }
+                else // files are found
+                {
+                    foreach (var file in textFiles)
+                    {
+                        if (ImportSingleFile(file))
+                        {
+                            files.Add(file);
+                            importedFileCount++;
+                        }
+                    }
+                    foreach (var f in files)
+                    {
+                        Console.WriteLine(f);
+                    }
+                    Console.WriteLine($"\t{importedFileCount} file(s) imported.");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"Could not find file '{fullPath}'");
+                Console.WriteLine($"This file: \"{path}\" does not exist on your computer!");
+            }
+        }
         public static void Dir()
         {
             int file_Counter = 0;
@@ -145,244 +531,6 @@ namespace OS_Simple_Shell
             }
             Console.WriteLine($"\t\t\t{folder_Counter} Dir(s)\t {Mini_FAT.get_Free_Size()} bytes free");
         }
-        public static Directory MoveToDir(string fullPath, Directory currentDirectory)
-        {
-            string[] parts = fullPath.Split('\\');
-            if (parts.Length == 0)
-            {
-                Console.WriteLine("Error: Invalid path.");
-                return null;
-            }
-            Directory targetDirectory = currentDirectory;
-            string s = new string(currentDirectory.Dir_Namee);
-            if (s.Contains("\0"))
-                s = s.Replace("\0", " ");
-            s = s.Trim();
-            if (parts[0].Equals(s.Trim('\0'), StringComparison.OrdinalIgnoreCase))
-            {
-                parts = parts.Skip(1).ToArray();
-            }
-            foreach (var part in parts)
-            {
-                if (string.IsNullOrWhiteSpace(part))
-                {
-                    continue;
-                }
-                int index = targetDirectory.search_Directory(part);
-                if (index == -1)
-                {
-                    return null;
-                }
-                Directory_Entry entry = targetDirectory.DirectoryTable[index];
-                if ((entry.dir_Attr & 0x10) != 0x10)
-                {
-                    return null;
-                }
-                targetDirectory = new Directory(entry.Dir_Namee, entry.dir_Attr, entry.dir_First_Cluster, targetDirectory);
-                targetDirectory.Read_Directory();
-            }
-            return targetDirectory;
-        }
-        public static File_Entry MoveToFile(string fullPath)
-        {
-            int lastSlashIndex = fullPath.LastIndexOf('\\');
-            if (lastSlashIndex == -1)
-            {
-                return null;
-            }
-            string fileName = fullPath.Substring(lastSlashIndex + 1); // Extract file name
-            string directoryPath = fullPath.Substring(0, lastSlashIndex); // Remove file name to get directory path
-            Directory parentDirectory = MoveToDir(directoryPath, Program.currentDirectory);
-            if (parentDirectory == null)
-            {
-                return null;
-            }
-            parentDirectory.Read_Directory();
-            int index = parentDirectory.search_Directory(fileName);
-            if (index == -1)
-            {
-                return null;
-            }
-            Directory_Entry fileEntry = parentDirectory.DirectoryTable[index];
-            File_Entry e = new File_Entry(fileEntry, Program.currentDirectory);
-            File_Entry file = new File_Entry(e.Dir_Namee, e.dir_Attr, e.dir_First_Cluster, e.dir_FileSize, parentDirectory, e.content);
-            return file;
-        }
-        public static void ChangeDirectory(string path)
-        {
-            if (path == ".")
-            {
-                return;
-            }
-            if (path.StartsWith(".."))
-            {
-                string[] levelsUp = path.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
-                int l = levelsUp.Length;
-                for (int i = 0; i < l; i++)
-                {
-                    int lastBackslash = Program.path.LastIndexOf("\\");
-                    if (Program.currentDirectory.Parent != null)
-                    {
-                        Program.currentDirectory = Program.currentDirectory.Parent;
-                        Program.path = Program.path.Substring(0, lastBackslash);
-                        Program.currentDirectory.Read_Directory();
-                    }
-                    else
-                    {
-                        return;
-                    }
-                }
-                return;
-            }
-            if (path.Contains("\\") || path.Contains("/"))
-            {
-                Directory targetDir = MoveToDir(path, Program.currentDirectory);
-                if (targetDir != null) // folder is found 
-                {
-                    Program.currentDirectory = targetDir;
-                    Program.path = path;
-                }
-                else // folder not found 
-                {
-                    Console.WriteLine($"Error: This path \"{path}\" is not exists!");
-                    return;
-                }
-                return;
-            }
-            int index = Program.currentDirectory.search_Directory(path);
-            if (index == -1) // this folder not found 
-            {
-                Console.WriteLine($"Error: this path '{path}' is not exists!");
-                return;
-            }
-            Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
-            if (entry.dir_Attr != 0x10)
-            {
-                Console.WriteLine($"Error: '{path}' is not a directory.");
-                return;
-            }
-            else // this is folder 
-            {
-                string name = new string(entry.Dir_Namee).Trim();
-                if (name.Contains("\0"))
-                {
-                    name = name.Replace("\0", " ");
-                }
-                name = name.Trim();
-                Directory newDir = new Directory(name.ToCharArray(), entry.dir_Attr, entry.dir_First_Cluster, Program.currentDirectory);
-                newDir.Read_Directory();
-                Program.currentDirectory = newDir;
-                Program.path = Program.path + "\\" + path;
-            }
-
-        } //cd 
-        public static void RemoveDirectory(string name)
-        {
-            if(name.Contains("."))
-            {
-                Console.WriteLine($"Error : this path \"{name}\" is not Directory");
-                return; 
-            }
-            if (name.Contains("\\") && !name.Contains("."))
-            {
-                int las = name.LastIndexOf('\\');
-                string dire = name.Substring(0, las);
-
-                Directory d = MoveToDir(name, Program.currentDirectory);// this is directory we want delete it 
-                Directory dd = MoveToDir(dire, Program.currentDirectory); // this is parent for this directory 
-                if (d != null)// directory is found 
-                {
-                    string dname = new string(d.Dir_Namee);// get name 
-                    int index3 = dd.search_Directory(dname);// search for this name 
-
-                    if (d.DirectoryTable.Count > 0) // if directory have sup directory or files 
-                    {
-                        Console.WriteLine($"Error: Directory '{dname}' is not empty!");
-                        return;
-                    }
-                    else
-                    {
-                        Console.Write($"Are you sure you want to delete '{dname}' ,please enter y for Yes or n for No: "); // ask user if want to delete it 
-                        string answer = Console.ReadLine();
-                        while (answer != "y" || answer != "n")
-                        {
-                            if (answer == "y")
-                            {
-                                d.delete_Directory();
-                                dd.DirectoryTable.RemoveAt(index3);
-                                dd.Write_Directory();
-                                if (Program.currentDirectory.Parent != null)
-                                {
-                                    Program.currentDirectory.Update_Content(d, Program.currentDirectory.Parent);
-                                }
-                                return;
-                            }
-                            else if (answer == "n")
-                            {
-                                return;
-                            }
-                            else
-                            {
-                                Console.Write($"Are you sure you want to delete '{dname}' ,please enter y for Yes or n for No: ");
-                                answer = Console.ReadLine();
-                            }
-                        }
-                        Program.currentDirectory.Read_Directory();
-                    }
-                }
-                else // if directory not found 
-                {
-                    Console.WriteLine($"Error : this directory \"{name}\" is not exist!");
-                    return;
-                }
-            }
-            // here for non fullpath to directory 
-            int index = Program.currentDirectory.search_Directory(name); // search if found or not 
-            if (index == -1) // here not found 
-            {
-                Console.WriteLine($"Error: this directory '{name}' does not exist on your disk!");
-                return;
-            }
-            // here if found directory 
-            Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
-            if (entry.dir_Attr != 0x10) // need to check if this is directory or not 
-            {
-                Console.WriteLine($"Error: '{name}' is not a directory!"); 
-                return;
-            }
-            int firstCluster = entry.dir_First_Cluster;
-            Directory dirToDelete = new Directory(name.ToCharArray(), entry.dir_Attr, firstCluster, Program.currentDirectory);
-            dirToDelete.Read_Directory();
-            if (dirToDelete.DirectoryTable.Count > 0) // if directory have sup directory or files 
-            {
-                Console.WriteLine($"Error: Directory '{name}' is not empty!");
-                return;
-            }
-            else 
-            {
-                Console.Write($"Are you sure you want to delete '{name}' ,please enter y for Yes or n for No: ");// ask user if want to delete it 
-                string answer = Console.ReadLine();
-                while (answer != "y" || answer != "n")
-                {
-                    if (answer == "y")
-                    {
-                        dirToDelete.delete_Directory();
-                        Program.currentDirectory.DirectoryTable.RemoveAt(index);
-                        Program.currentDirectory.Write_Directory();
-                        return;
-                    }
-                    else if (answer == "n")
-                    {
-                        return;
-                    }
-                    else
-                    {
-                        Console.Write($"Are you sure you want to delete '{name}' ,please enter y for Yes or n for No:");
-                        answer = Console.ReadLine();
-                    }
-                }
-            }
-        }//rd
         public static void list_OF_Directory(string name)
         {
             if (name == "")
@@ -421,9 +569,276 @@ namespace OS_Simple_Shell
                 Dir(name);
             }
         }//dir       
+        public static void ChangeDirectory_v2(string name)
+        {
+            if (name == ".") // test case(6) 
+            {
+                return; // do nothing because “.” Means the current directory. 
+            }
+            else if (name.Contains("\\") && !name.Contains(".")) // this is fullpath to directory 
+            {
+                Directory targetDirectory = MoveToDir(name, Program.currentDirectory);
+                if (targetDirectory != null) // this mean this directory is found 
+                {
+                    Program.currentDirectory = targetDirectory; // make current_Directory seek or point to this directory 
+                    Program.path = name; // update path 
+                    return;
+                }
+                else // this directory not found 
+                {
+                    Console.WriteLine($"Error: This path \"{name}\" is not exists!");
+                    return;
+                }
+            }
+            else if (name.StartsWith("..")) // this mean go back to parent  
+            {
+                string[] pathParts = name.Split('\\'); // Split the path (extract name & size)
+                int length = pathParts.Length; // get length of {..}
+                for (int i = 0; i < length; i++)
+                {
+                    int last_INDEX = Program.path.LastIndexOf("\\");
+                    if (Program.currentDirectory.Parent != null)
+                    {
+                        Program.currentDirectory = Program.currentDirectory.Parent;
+                        Program.path = Program.path.Substring(0, last_INDEX);
+                        Program.currentDirectory.Read_Directory();                        
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+                return;
+            }
+            else // this is name without fullpath 
+            {
+                int index = Program.currentDirectory.search_Directory(name); // search for this name 
+                if(index == -1) // don't found this directory 
+                {
+                    Console.WriteLine($"Error: this path '{name}' is not exists!");
+                    return;
+                }
+                else // found this dire but need to ensure this is directory by att = 0x10 
+                {
+                    Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
+                    if (entry.dir_Attr == 0x0) // this mean this is file 
+                    {
+                        Console.WriteLine($"Error: '{name}' is not a directory.");
+                        return;
+                    }
+                    else // this mean this is directory so move to this directory 
+                    {
+                        Directory tagretDirectory = new Directory(entry.Dir_Namee, entry.dir_Attr, entry.dir_First_Cluster, Program.currentDirectory);
+                        tagretDirectory.Read_Directory();
+                        Program.currentDirectory = tagretDirectory;
+                        Program.path += "\\" + name;
+                        return;
+                    }
+                }
+            }
+        }
+        public static void deleteFile(string name)
+        {
+            if (name.Contains("\\") && !name.Contains("."))
+            {
+                Console.WriteLine($"This file : {name} is not file name or ACCESS DENIE!");
+                return;
+            }
+            else if (name.Contains("\\") && name.Contains("."))
+            {
+                File_Entry file_deleted = MoveToFile(name);
+                if (file_deleted == null) // this file not found 
+                {
+                    Console.WriteLine($"this file : \"{name}\" does not exist on your disk");
+                    return;
+                }
+                else // file found so ask user if want delete this file 
+                {
+                    string[] pathParts = name.Split('\\'); // Split the path (extract name & size)
+                    string fileName = pathParts[pathParts.Length - 1]; // here we get the file name 
+                    string name_of_Directory = pathParts[pathParts.Length - 2]; // get directory parent of this file 
+                    Console.Write($"Are you sure that you want to delete \"{fileName}\", please enter Y for yes or N for no: ");
+                    Directory targetDirectory = MoveToDir(name_of_Directory, Program.currentDirectory);
+                    int index = targetDirectory.search_Directory(fileName);
+                    string answer;
+                    answer = Console.ReadLine();
+                    while (answer != "y" || answer != "n")
+                    {
+                        if (answer == "y")
+                        {
+                            file_deleted.Delete_File(fileName);
+                            targetDirectory.DirectoryTable.RemoveAt(index);
+                            targetDirectory.Write_Directory();
+                            targetDirectory.Read_Directory();
+                            if (Program.currentDirectory.Parent != null)
+                            {
+                                Program.currentDirectory.Update_Content(targetDirectory, Program.currentDirectory.Parent);
+                            }
+                            return;
+                        }
+                        else if (answer == "n")
+                        {
+                            return;
+                        }
+                        else
+                            Console.Write($"Are you sure that you want to delete \"{name}\", please enter Y for yes or N for no: ");
+                            answer = Console.ReadLine();
+                    }
+                }
+
+            }
+            else
+            {
+                int index = Program.currentDirectory.search_Directory(name);
+                if (index == -1) // file not found 
+                {
+                    Console.WriteLine($"this file : \"{name}\" does not exist on your disk");
+                    return;
+                }
+                else // file is found so ensure this file you search is file not a directory 
+                {
+                    Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
+                    if(entry.dir_Attr == 0x10) // this is not file 
+                    {
+                        Console.WriteLine($"This file : {name} is not file name or ACCESS DENIE!");
+                        return;
+                    }
+                    else // this is file so delte it 
+                    {
+                        File_Entry file = new File_Entry(entry, Program.currentDirectory);
+                        Console.Write($"Are you sure that you want to delete \"{name}\", please enter Y for yes or N for no: ");
+                        string answer;
+                        answer = Console.ReadLine();
+                        while (answer != "y" || answer != "n")
+                        {
+                            if (answer == "y")
+                            {
+                                file.Delete_File(name);
+                                Program.currentDirectory.Write_Directory();
+                                Program.currentDirectory.Read_Directory();
+                                return;
+                            }
+                            else if (answer == "n")
+                            {
+                                return;
+                            }
+                            else
+                                Console.Write($"Are you sure that you want to delete \"{name}\", please enter Y for yes or N for no: ");
+                            answer = Console.ReadLine();
+                        }
+                    }
+                }
+            }
+        }
+        public static void RemoveDirectory(string name)
+        {
+            if (name.Contains(".")) // this is a file not Directory 
+            {
+                Console.WriteLine($"This Directory : \"{name}\" is not Directory name or ACCESS DENIE!");
+                return;
+            }
+            if (name.Contains("\\") && !name.Contains("."))
+            {
+                int last_Index = name.LastIndexOf("\\");
+                string directory_Name = name.Substring(0, last_Index); // this is parent of this directory 
+                Directory target_Deleted_Directory = MoveToDir(name, Program.currentDirectory); // directory we want to delete it 
+                Directory parent_Of_Target = MoveToDir(directory_Name, Program.currentDirectory);
+                if (target_Deleted_Directory == null) // this directory is not found 
+                {
+                    Console.WriteLine($"Error : this directory \"{name}\" is not exist!");
+                    return;
+                }
+                else
+                {
+                    string name_Target_Directory = new string(target_Deleted_Directory.Dir_Namee); // get name of target we want to delete it 
+                    int index = parent_Of_Target.search_Directory(name_Target_Directory); // search in his parent to get index of target 
+                    if (target_Deleted_Directory.DirectoryTable.Count > 0) // check if tagret have any files or sup_directory 
+                    {
+                        Console.WriteLine($"Error: Directory '{name_Target_Directory}' is not empty!");
+                        return;
+                    }
+                    else // this mean this directory is Empty so delete this directory 
+                    {
+                        Console.Write($"Are you sure you want to delete '{name_Target_Directory}' ,please enter y for Yes or n for No: "); // ask user if want to delete it 
+                        string answer = Console.ReadLine();
+                        while (answer != "y" || answer != "n")
+                        {
+                            if (answer == "y")
+                            {
+                                target_Deleted_Directory.delete_Directory();
+                                parent_Of_Target.DirectoryTable.RemoveAt(index);
+                                parent_Of_Target.Write_Directory();
+                                if (parent_Of_Target != null)
+                                {
+                                    Program.currentDirectory.Update_Content(target_Deleted_Directory, parent_Of_Target);
+                                }
+                                return;
+                            }
+                            else if (answer == "n")
+                            {
+                                return;
+                            }
+                            else
+                            {
+                                Console.Write($"Are you sure you want to delete '{name_Target_Directory}' ,please enter y for Yes or n for No: ");
+                                answer = Console.ReadLine();
+                            }
+                        }
+                        Program.currentDirectory.Read_Directory();
+                    }
+                }
+            }
+
+            int index_of_DirectoryDeleted = Program.currentDirectory.search_Directory(name);
+            if (index_of_DirectoryDeleted == -1) // if this directory not found 
+            {
+                Console.WriteLine($"Error: this directory '{name}' does not exist on your disk!");
+                return;
+            }
+            Directory_Entry entry = Program.currentDirectory.DirectoryTable[index_of_DirectoryDeleted]; // get this directory
+            if (entry.dir_Attr == 0x0) // checl if this is file or directory 
+            {
+                Console.WriteLine($"This Directory : \"{name}\" is not Directory name or ACCESS DENIE!");
+                return;
+            }
+            else
+            {
+                Directory targetDirectory = new Directory(entry.Dir_Namee, entry.dir_Attr, entry.dir_First_Cluster, Program.currentDirectory);
+                targetDirectory.Read_Directory(); // ensure read this directory to get content of this directory 
+                if (targetDirectory.DirectoryTable.Count > 0) // check if this directory have any files or sup-Directories
+                {
+                    Console.WriteLine($"Error: Directory '{name}' is not empty!");
+                    return;
+                }
+                else
+                {
+                    Console.Write($"Are you sure you want to delete '{name}' ,please enter y for Yes or n for No: ");// ask user if want to delete it 
+                    string answer = Console.ReadLine();
+                    while (answer != "y" || answer != "n")
+                    {
+                        if (answer == "y")
+                        {
+                            targetDirectory.delete_Directory();
+                            Program.currentDirectory.DirectoryTable.RemoveAt(index_of_DirectoryDeleted);
+                            Program.currentDirectory.Write_Directory();
+                            return;
+                        }
+                        else if (answer == "n")
+                        {
+                            return;
+                        }
+                        else
+                        {
+                            Console.Write($"Are you sure you want to delete '{name}' ,please enter y for Yes or n for No:");
+                            answer = Console.ReadLine();
+                        }
+                    }
+                }
+            }
+        }
         public static void Rename(string _oldName, string _newName)
         {
-            if (_newName.Contains("\\"))
+            if (_newName.Contains("\\")) // ensure the new name should not have any fullpath 
             {
                 Console.WriteLine("Error: the new file name should be a file name only you cannot provide a full path!");
                 return;
@@ -441,13 +856,12 @@ namespace OS_Simple_Shell
                     else // file found 
                     {
                         // we need to get directory of this file
-                        int lastSlashIndex = _oldName.LastIndexOf('\\');
-                        string name_of_Directory = _oldName.Substring(0, lastSlashIndex);
                         string[] pathParts = _oldName.Split('\\'); // Split the path (extract name & size)
-                        string fileName = pathParts[pathParts.Length - 1]; // ppp.txt 
-                        Directory d = MoveToDir(name_of_Directory, Program.currentDirectory);
-                        int index_new_file = d.search_Directory(_newName);
-                        int index_old_file = d.search_Directory(fileName); // we need index of old file 
+                        string fileName = pathParts[pathParts.Length - 1]; // here we get the file name 
+                        string name_of_Directory = pathParts[pathParts.Length - 2]; // get directory parent of this file 
+                        Directory targetDirectory = MoveToDir(name_of_Directory, Program.currentDirectory);
+                        int index_new_file = targetDirectory.search_Directory(_newName);
+                        int index_old_file = targetDirectory.search_Directory(fileName); // we need index of old file 
                         if (index_new_file != -1) // this file found
                         {
                             Console.WriteLine("Error: A duplicate file name exists!");
@@ -457,13 +871,13 @@ namespace OS_Simple_Shell
                         {
                             if (_newName.Contains("."))
                             {
-                                Directory_Entry e = d.DirectoryTable[index_old_file];
-                                e.Dir_Namee = _newName.ToCharArray();
-                                d.Write_Directory();
-                                File_Entry f = new File_Entry(e, d);
-                                f.Read_File_Content();
-                                f.Write_File_Content();
-                                d.Write_Directory();
+                                Directory_Entry entry = targetDirectory.DirectoryTable[index_old_file];
+                                entry.Dir_Namee = _newName.ToCharArray();
+                                targetDirectory.Write_Directory();
+                                File_Entry file_renamed = new File_Entry(entry, targetDirectory);
+                                file_renamed.Read_File_Content();
+                                file_renamed.Write_File_Content();
+                                targetDirectory.Write_Directory();
                                 return;
                             }
                             else
@@ -495,16 +909,16 @@ namespace OS_Simple_Shell
                     Console.WriteLine("Error: A duplicate file name exists!");
                     return;
                 }
-                if (entry.dir_Attr == 0x0) // file 
+                if (entry.dir_Attr == 0x0) // ensure this is file 
                 {
-                    if (_newName.Contains("."))
+                    if (_newName.Contains(".")) // ensure new name should have extension 
                     {
-                        entry.Dir_Namee = _newName.ToCharArray();
-                        Program.currentDirectory.Write_Directory();
-                        File_Entry file = new File_Entry(entry, Program.currentDirectory);
-                        file.Read_File_Content();
-                        file.Write_File_Content();
-                        Program.currentDirectory.Write_Directory();
+                        entry.Dir_Namee = _newName.ToCharArray(); // change oldName with newName 
+                        Program.currentDirectory.Write_Directory(); // ensure save this change with write directory 
+                        File_Entry file = new File_Entry(entry, Program.currentDirectory); // get object of this file 
+                        file.Read_File_Content(); // read this content 
+                        file.Write_File_Content(); // and write it to ensure save his content and size of this file 
+                        Program.currentDirectory.Write_Directory(); // save this changes is his directory with writeDirectory
                     }
                     else
                     {
@@ -514,32 +928,27 @@ namespace OS_Simple_Shell
                 }
             }
         }
-        public static void Make_Directory2(string name)
+        public static void Make_Directory(string name)
         {
-            string dirName = name;
-            if (dirName.Contains("\\"))
+            if (name.Contains("\\"))
             {
-                Directory cd = MoveToDir(dirName, Program.currentDirectory);
-                if (cd != null) // this directory is found 
+                // we need to chack if this directory is found or nor 
+                Directory found = MoveToDir(name, Program.currentDirectory);
+                if (found == null) // so this directory not found so check if can add entry or not 
                 {
-                    Console.WriteLine($"Error : this directory \"{new string(cd.Dir_Namee)}\" is already exits!");
-                    return;
-                }
-                else // directory not found so make it 
-                {
-                    int last = dirName.LastIndexOf('\\');
-                    string namedir = dirName.Substring(last + 1); // get name of directory 
-                    string ddd = dirName.Substring(0, last);
-                    Directory d = MoveToDir(ddd, Program.currentDirectory); // get parent of this dir
-                    Directory newDir = new Directory(namedir.ToCharArray(), 0x10, 0, d); // make new dire 
-                    if (d.Can_Add_Entry(newDir))
+                    string[] pathParts = name.Split('\\'); // Split the path (extract name & size)
+                    string name_of_Directory = pathParts[pathParts.Length - 1]; // get name of directory 
+                    string name_Parent_Of_new_Directory = pathParts[pathParts.Length - 2]; // get parent directory of this Directory 
+                    Directory parent_New_Directory = MoveToDir(name_Parent_Of_new_Directory, Program.currentDirectory); // get object of parent directory 
+                    Directory new_Directory = new Directory(name_of_Directory.ToCharArray(), 0x10, 0, parent_New_Directory);
+                    if (parent_New_Directory.Can_Add_Entry(new_Directory)) // check if can add any entry or not 
                     {
-                        d.add_Entry(newDir);
-                        d.Write_Directory();
-                        if (d.Parent != null)
+                        parent_New_Directory.add_Entry(new_Directory); // add new entry
+                        parent_New_Directory.Write_Directory();
+                        if (parent_New_Directory.Parent != null)
                         {
-                            d.Parent.Write_Directory();
-                            d.Update_Content(d.Get_Directory_Entry(), d.Parent.Get_Directory_Entry());
+                            parent_New_Directory.Parent.Write_Directory();
+                            parent_New_Directory.Update_Content(parent_New_Directory.Get_Directory_Entry(), parent_New_Directory.Parent.Get_Directory_Entry());
                         }
                         return;
                     }
@@ -549,1137 +958,448 @@ namespace OS_Simple_Shell
                         return;
                     }
                 }
-            }
-            else // this without fullpath 
-            {
-                if (Program.currentDirectory.search_Directory(dirName) != -1)
-                {
-                    Console.WriteLine($"Error: this directory \"{name}\" already exists!");
-                    return;
-                }
-                Directory newDir = new Directory(dirName.ToCharArray(), 0x10, 0, Program.currentDirectory);
-                if (Program.currentDirectory.Can_Add_Entry(newDir))
-                {
-                    Program.currentDirectory.add_Entry(newDir);
-                    Program.currentDirectory.Write_Directory();
-                    if (Program.currentDirectory.Parent != null)
-                    {
-                        Program.currentDirectory.Parent.Write_Directory();
-                        Program.currentDirectory.Update_Content(Program.currentDirectory.Get_Directory_Entry(), Program.currentDirectory.Parent.Get_Directory_Entry());
-                    }
-                }
                 else
                 {
-                    Console.WriteLine("Error: Could not create the directory.");
+                    Console.WriteLine($"Error : this directory \"{new string(found.Dir_Namee)}\" is already exits!");
+                    return;
                 }
             }
-        } //md        
-        //done with all test cases
-        public static void Type(string name)
-        {
-          
-            if (name.Contains("\\")) // to enshure this is file 
+            else // if this without fullpath
             {
-                File_Entry ff = MoveToFile(name);
-                if (ff == null) // file not found 
+                int index = Program.currentDirectory.search_Directory(name); // get index of search this directory 
+                if (index == -1) // this directory is not found so create this directory
+                {
+                    Directory newDirectory = new Directory(name.ToCharArray(), 0x10, 0, Program.currentDirectory);
+                    if (Program.currentDirectory.Can_Add_Entry(newDirectory)) // check if can add this entry or not
+                    {
+                        Program.currentDirectory.add_Entry(newDirectory); // add this entry 
+                        Program.currentDirectory.Write_Directory(); // and ensure writeDirectory 
+                        if (Program.currentDirectory.Parent != null) // check if parent is not null
+                        {
+                            Program.currentDirectory.Parent.Write_Directory(); // update parent to save new data
+                            Program.currentDirectory.Update_Content(Program.currentDirectory.Get_Directory_Entry(), Program.currentDirectory.Parent.Get_Directory_Entry());
+                        }
+                        return;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Error: Could not create the directory.");
+                        return;
+                    }
+                }
+            }
+        }
+        public static void TypeFiles(string name)
+        {
+            if (name.Contains("\\") && !name.Contains("."))
+            {
+                Console.WriteLine($"Error: may be this \"{name}\" is not a file name or ACCESS IS DENIED!");
+                return;
+            }
+            if (name.Contains("\\") && name.Contains("."))
+            {
+                File_Entry file = MoveToFile(name); // split to get file name 
+                if (file == null) // mean if file not found 
                 {
                     Console.WriteLine($"this file : \"{name}\" does not exist on your disk!");
                     return;
                 }
-                if (ff.dir_Attr == 0x10 && ff != null)// this is not file 
+                else // file found so read contend of this file 
                 {
-                    Console.WriteLine($"Error: may be this \"{name}\" is not a file name or ACCESS IS DENIED!");
-                    return;
+                    file.Read_File_Content();
+                    file.Print_Content();
                 }
-                if (ff != null)// file found 
-                {
-                    string fname = new string(ff.Dir_Namee);
-                    int opp = name.LastIndexOf('\\');
-                    string move_to_this_dir = name.Substring(0, opp);
-                    Directory d = MoveToDir(move_to_this_dir, Program.currentDirectory);
-                    int index2 = d.search_Directory(fname);
-                    if (index2 != -1)
-                    {
-                        int fc = d.DirectoryTable[index2].dir_First_Cluster;
-                        int sz = d.DirectoryTable[index2].dir_FileSize;
-                        File_Entry ss = new File_Entry(fname.ToCharArray(), ff.dir_Attr, fc, sz, d, "");
-                        ss.Read_File_Content();
-                        Console.WriteLine(ss.content);
-                        return;
-                    }
-                    else
-                    {
-                        Console.WriteLine($"this file : \"{name}\" does not exist on your disk!");
-                        return;
-                    }
-                }
-
-            }
-
-            int index = Program.currentDirectory.search_Directory(name);
-            if (index != -1) // found 
-            {
-                if (Program.currentDirectory.DirectoryTable[index].dir_Attr == 0x10) // check if is filr or dir id dir error
-                {
-                    Console.WriteLine($"Error: may be this \"{name}\" is not a file name or ACCESS IS DENIED!");
-                    return;
-                }
-                int fc = Program.currentDirectory.DirectoryTable[index].dir_First_Cluster;
-                int sz = Program.currentDirectory.DirectoryTable[index].dir_FileSize;
-                File_Entry f = new File_Entry(name.ToCharArray(), 0x0, fc, sz, Program.currentDirectory, "");
-                f.Read_File_Content();
-                Console.WriteLine(f.content);
-                return;
             }
             else
             {
-                Console.WriteLine($"this file : \"{name}\" does not exist on your disk!");
-                return;
-            }
-        }
-        #region Import
-        public static void Importv2(string sorc, string dest)
-        {
-            string fullpath;
-            int imported_File_Count = 0;
-            if (System.IO.Path.IsPathRooted(sorc))
-            {
-                fullpath = sorc; // It's an absolute path
-            }
-            else
-            {
-                fullpath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), sorc); // from .exe app 
-
-            }
-            // First check if File exist
-            if (System.IO.File.Exists(fullpath))
-            {
-                if (dest.Contains("\\") || dest.Contains("."))
+                int index = Program.currentDirectory.search_Directory(name);
+                if (index == -1) // file not found 
                 {
-                    // if destinition is only file like import t1.txt pp.txt or t1.txt t1.txt 
-                    if (dest.Contains(".") && !dest.Contains("\\"))
-                    {
-                        int index_des = Program.currentDirectory.search_Directory(dest);
-                        if (index_des != -1) // found 
-                        {
-                            Console.WriteLine($"Error: A file is \"{dest}\" already exists on your disk!");
-                            Console.WriteLine($"NOTE : do you want to overwrite this file: \"{dest}\" , please enter y for Yes n for No!");
-                            string fileContent = System.IO.File.ReadAllText(fullpath);
-                            if (fileContent.Contains("\0"))
-                            {
-                                fileContent = fileContent.Replace("\0", " ");
-                            }
-                            fileContent = fileContent.Trim();
-                            int size = fileContent.Length;
-                            string answer = Console.ReadLine();
-                            while (answer != "y" || answer != "n")
-                            {
-                                if (answer == "y")
-                                {
-                                    File_Entry f_in_disk = new File_Entry(Program.currentDirectory.DirectoryTable[index_des], Program.currentDirectory);
-                                    f_in_disk.Read_File_Content();
-                                    f_in_disk.content = fileContent;
-                                    f_in_disk.dir_FileSize = size;
-                                    f_in_disk.Write_File_Content();
-                                    return;
-                                }
-                                if (answer == "n")
-                                {
-                                    return;
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"NOTE : do you want to overwrite this file: \"{dest}\" , please enter y for Yes n for No!");
-                                    answer = Console.ReadLine();
-                                }
-                            }
-                        }
-                        else // here not found
-                        {
-                            File_Entry ff = MoveToFile(dest);
-                            if (ff == null) // file not found  // pp.txt 
-                            {
-                                string[] pathParts = dest.Split('\\'); // Split the path (extract name & size)
-                                string fileName = pathParts[pathParts.Length - 1]; // ppp.txt 
-                                string fileContent = System.IO.File.ReadAllText(fullpath);
-                                if (fileContent.Contains("\0"))
-                                {
-                                    fileContent = fileContent.Replace("\0", " ");
-                                }
-                                fileContent = fileContent.Trim();
-                                int size = fileContent.Length;
-                                int fc = Mini_FAT.get_Availabel_Cluster();
-                                File_Entry f = new File_Entry(fileName.ToCharArray(), 0x0, fc, size, Program.currentDirectory, fileContent);
-                                f.Write_File_Content();
-                                Directory_Entry d = new Directory_Entry(fileName.ToCharArray(), 0, f.dir_First_Cluster, size);
-                                Program.currentDirectory.DirectoryTable.Add(d);
-                                imported_File_Count++;
-                                Program.currentDirectory.Write_Directory();
-                                if (Program.currentDirectory.Parent != null)
-                                {
-                                    Program.currentDirectory.Update_Content(Program.currentDirectory.Get_Directory_Entry(), Program.currentDirectory.Parent.Get_Directory_Entry());
-                                }
-                                Console.WriteLine($"{sorc}");
-                                Console.WriteLine($"\t{imported_File_Count} file(s) imported.");
-                                return;
-                            }
-                            else if (ff != null) // here file found 
-                            {
-                                Console.WriteLine($"this file \"{dest}\" is already exist on your disk!");
-
-                                Console.WriteLine($"\t{imported_File_Count} file(s) imported.");
-                                return;
-                            }
-                            else // here dest is folder 
-                            {
-                                Directory d = MoveToDir(dest, Program.currentDirectory);
-                                if (d != null)
-                                {
-                                    string fileContent = System.IO.File.ReadAllText(fullpath);
-                                    if (fileContent.Contains("\0"))
-                                    {
-                                        fileContent = fileContent.Replace("\0", " ");
-                                    }
-                                    fileContent = fileContent.Trim();
-                                    int size = fileContent.Length;
-                                    int fc = Mini_FAT.get_Availabel_Cluster();
-                                    File_Entry f = new File_Entry(sorc.ToCharArray(), 0x0, fc, size, d, fileContent);
-                                    f.Write_File_Content();
-                                    Directory_Entry dd = new Directory_Entry(sorc.ToCharArray(), 0, f.dir_First_Cluster, size);
-                                    d.DirectoryTable.Add(dd);
-                                    imported_File_Count++;
-                                    d.Write_Directory();
-                                    if (Program.currentDirectory.Parent != null)
-                                    {
-                                        Program.currentDirectory.Update_Content(d.Get_Directory_Entry(), d.Parent.Get_Directory_Entry());
-                                    }
-                                    Console.WriteLine($"{sorc}");
-                                    Console.WriteLine($"\t{imported_File_Count} file(s) imported.");
-                                    return;
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"this directory \"{dest}\" not exist on your disk!");
-                                    return;
-                                }
-                            }
-
-                        }
-
-
-                    }
-                    else // dest full path 
-                    {
-                        File_Entry ffv2 = MoveToFile(dest); // N:\kk\p1.txt
-                        if (dest.Contains(".")) // to ensure this is file
-                        {
-                            if (ffv2 == null) // file not found so import it  
-                            {
-                                string[] pathParts = dest.Split('\\');
-                                string fileName = pathParts[pathParts.Length - 1]; // p1.txt 
-                                int indexDir = dest.LastIndexOf("\\");
-                                string name_Dir = dest.Substring(0, indexDir);
-                                Directory dd = MoveToDir(name_Dir, Program.currentDirectory);
-                                if (dd != null) // dir found and import file 
-                                {
-
-                                    string fileContent = System.IO.File.ReadAllText(fullpath);
-                                    if (fileContent.Contains("\0"))
-                                    {
-                                        fileContent = fileContent.Replace("\0", " ");
-                                    }
-                                    fileContent = fileContent.Trim();
-                                    int size = fileContent.Length;
-                                    int fc = Mini_FAT.get_Availabel_Cluster();
-                                    File_Entry f = new File_Entry(fileName.ToCharArray(), 0x0, fc, size, dd, fileContent);
-                                    f.Write_File_Content();
-                                    Directory_Entry dd2 = new Directory_Entry(fileName.ToCharArray(), 0, f.dir_First_Cluster, size);
-                                    dd.DirectoryTable.Add(dd2);
-                                    imported_File_Count++;
-                                    dd.Write_Directory();
-
-                                    if (Program.currentDirectory.Parent != null)
-                                    {
-                                        Program.currentDirectory.Update_Content(dd.Get_Directory_Entry(), dd.Parent.Get_Directory_Entry());
-                                    }
-                                    Console.WriteLine($"{sorc}");
-                                    Console.WriteLine($"\t{imported_File_Count} file(s) imported.");
-                                    return;
-
-
-
-
-                                }
-                                else // dir not found so print error 
-                                {
-                                    Console.WriteLine($"Error this path \"{dest}\" does not exist on your disk!");
-                                    return;
-                                }
-
-
-                            }
-                            else // this file found 
-                            {
-                                string name_file = new string(ffv2.Dir_Namee);
-                                Console.WriteLine($"Error: A file is \"{name_file}\" already exists on your disk!");
-                                Console.WriteLine($"NOTE : do you want to overwrite this file: \"{name_file}\" , please enter y for Yes n for No!");
-                                string fileContent = System.IO.File.ReadAllText(fullpath);
-                                if (fileContent.Contains("\0"))
-                                {
-                                    fileContent = fileContent.Replace("\0", " ");
-                                }
-                                fileContent = fileContent.Trim();
-                                int size = fileContent.Length;
-                                int indexDir = dest.LastIndexOf("\\");
-                                string name_Dir = dest.Substring(0, indexDir);
-                                Directory dd = MoveToDir(name_Dir, Program.currentDirectory);
-                                int index = dd.search_Directory(name_file);
-                                string answer = Console.ReadLine();
-                                while (answer != "y" || answer != "n")
-                                {
-                                    if (answer == "y")
-                                    {
-                                        File_Entry f_in_disk = new File_Entry(dd.DirectoryTable[index], dd);
-                                        f_in_disk.Read_File_Content();
-                                        f_in_disk.content = fileContent;
-                                        f_in_disk.dir_FileSize = size;
-                                        f_in_disk.Write_File_Content();
-                                        return;
-
-                                    }
-                                    if (answer == "n")
-                                    {
-                                        break;
-                                    }
-                                    else
-                                    {
-                                        Console.WriteLine($"NOTE : do you want to overwrite this file: \"{name_file}\" , please enter y for Yes n for No!");
-                                        answer = Console.ReadLine();
-                                    }
-                                }
-                            }
-                        }
-                        // here if this full path is folder
-                        else
-                        {
-                            // we need move to dir 
-                            Directory d = MoveToDir(dest, Program.currentDirectory);
-                            if (d != null) // this dir found 
-                            {
-                                string[] pathParts = sorc.Split('\\'); // Split the path (extract name & size)
-                                string fileName = pathParts[pathParts.Length - 1];
-                                int index = d.search_Directory(fileName);
-                                if (index == -1) // file not found in this directory
-                                {
-                                    string fileContent = System.IO.File.ReadAllText(fullpath);
-                                    if (fileContent.Contains("\0"))
-                                    {
-                                        fileContent = fileContent.Replace("\0", " ");
-                                    }
-                                    fileContent = fileContent.Trim();
-                                    int size = fileContent.Length;
-
-                                    int fc = Mini_FAT.get_Availabel_Cluster();
-
-                                    File_Entry f = new File_Entry(fileName.ToCharArray(), 0x0, fc, size, d, fileContent);
-                                    f.Write_File_Content();
-                                    Directory_Entry dd = new Directory_Entry(fileName.ToCharArray(), 0, f.dir_First_Cluster, size);
-                                    d.DirectoryTable.Add(dd);
-                                    imported_File_Count++;
-                                    d.Write_Directory();
-
-                                    if (Program.currentDirectory.Parent != null)
-                                    {
-                                        Program.currentDirectory.Update_Content(d.Get_Directory_Entry(), d.Parent.Get_Directory_Entry());
-                                    }
-                                    Console.WriteLine($"{sorc}");
-                                    Console.WriteLine($"\t{imported_File_Count} file(s) imported.");
-                                    return;
-                                }
-                                else // file found 
-                                {
-                                    Console.WriteLine($"this file \"{sorc}\" is already exist on your disk!");
-                                    Console.WriteLine($"NOTE : do you want to overwrite this file: \"{sorc}\" , please enter y for Yes n for No!");
-                                    string fileContent = System.IO.File.ReadAllText(fullpath);
-                                    if (fileContent.Contains("\0"))
-                                    {
-                                        fileContent = fileContent.Replace("\0", " ");
-                                    }
-                                    fileContent = fileContent.Trim();
-                                    int size = fileContent.Length;
-                                    //int index2 = d.search_Directory(sorc);
-                                    string answer = Console.ReadLine();
-                                    while (answer != "y" || answer != "n")
-                                    {
-                                        if (answer == "y")
-                                        {
-                                            File_Entry f_in_disk = new File_Entry(d.DirectoryTable[index], d);
-                                            f_in_disk.Read_File_Content();
-                                            f_in_disk.content = fileContent;
-                                            f_in_disk.dir_FileSize = size;
-                                            f_in_disk.Write_File_Content();
-                                            imported_File_Count++;
-                                            break;
-
-                                        }
-                                        if (answer == "n")
-                                        {
-                                            return;
-                                        }
-                                        else
-                                        {
-                                            Console.WriteLine($"NOTE : do you want to overwrite this file: \"{sorc}\" , please enter y for Yes n for No!");
-                                            answer = Console.ReadLine();
-                                        }
-                                    }
-                                    Console.WriteLine($"{sorc}");
-                                    Console.WriteLine($"\t{imported_File_Count} file(s) imported.");
-                                    return;
-                                }
-
-                            }
-                            else
-                            {
-                                Console.WriteLine($"Error : this \"{dest}\" does not exist on your disk!");
-                                return;
-                            }
-                        }
-
-                    }
+                    Console.WriteLine($"this file : \"{name}\" does not exist on your disk!");
+                    return;
                 }
-                // import to folder 
-                // import t1.txt kk => kk is destinition                
-                else // without full path in dest
+                else // file is found 
                 {
-                    // here folder without full path
-                    int index_dir = Program.currentDirectory.search_Directory(dest);
-                    if (index_dir != -1) // dir found 
+                    Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
+                    if (entry.dir_Attr == 0x10) // this mean this is directory it's not file 
                     {
-                        Directory d = MoveToDir(dest, Program.currentDirectory);
-                        if (d != null)
-                        {
-                            int index_File = d.search_Directory(sorc); // seacrch to file 
-                            if (index_File == -1) // if file not exist import this file 
-                            {
-                                string fileContent = System.IO.File.ReadAllText(fullpath);
-                                if (fileContent.Contains("\0"))
-                                {
-                                    fileContent = fileContent.Replace("\0", " ");
-                                }
-                                fileContent = fileContent.Trim();
-                                int size = fileContent.Length;
-
-                                int fc = Mini_FAT.get_Availabel_Cluster();
-
-                                File_Entry f = new File_Entry(sorc.ToCharArray(), 0x0, fc, size, d, fileContent);
-                                f.Write_File_Content();
-                                Directory_Entry dd = new Directory_Entry(sorc.ToCharArray(), 0, f.dir_First_Cluster, size);
-                                d.DirectoryTable.Add(dd);
-                                imported_File_Count++;
-                                d.Write_Directory();
-
-                                if (Program.currentDirectory.Parent != null)
-                                {
-                                    Program.currentDirectory.Update_Content(d.Get_Directory_Entry(), d.Parent.Get_Directory_Entry());
-                                }
-                                Console.WriteLine($"{sorc}");
-                                Console.WriteLine($"\t{imported_File_Count} file(s) imported.");
-                                return;
-                            }
-                            // here if file is exist in this folder with same name 
-                            // so ask user if want overwrite or not 
-                            else
-                            {
-                                Console.WriteLine($"this file \"{sorc}\" is already exist on your disk!");
-                                Console.WriteLine($"NOTE : do you want to overwrite this file: \"{sorc}\" , please enter y for Yes n for No!");
-                                string fileContent = System.IO.File.ReadAllText(fullpath);
-                                if (fileContent.Contains("\0"))
-                                {
-                                    fileContent = fileContent.Replace("\0", " ");
-                                }
-                                fileContent = fileContent.Trim();
-                                int size = fileContent.Length;
-                                int index = d.search_Directory(sorc);
-                                string answer = Console.ReadLine();
-                                while (answer != "y" || answer != "n")
-                                {
-                                    if (answer == "y")
-                                    {
-                                        File_Entry f_in_disk = new File_Entry(d.DirectoryTable[index], d);
-                                        f_in_disk.Read_File_Content();
-                                        f_in_disk.content = fileContent;
-                                        f_in_disk.dir_FileSize = size;
-                                        f_in_disk.Write_File_Content();
-                                        imported_File_Count++;
-                                        break;
-
-                                    }
-                                    if (answer == "n")
-                                    {
-                                        return;
-                                    }
-                                    else
-                                    {
-                                        Console.WriteLine($"NOTE : do you want to overwrite this file: \"{sorc}\" , please enter y for Yes n for No!");
-                                        answer = Console.ReadLine();
-                                    }
-                                }
-                                Console.WriteLine($"{sorc}");
-                                Console.WriteLine($"\t{imported_File_Count} file(s) imported.");
-                                return;
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine($"this directory \"{dest}\" not exist on your disk!");
-                            return;
-                        }
+                        Console.WriteLine($"Error: may be this \"{name}\" is not a file name or ACCESS IS DENIED!");
+                        return;
                     }
-                    else
+                    else // this is file so get content of this file 
                     {
-                        Console.WriteLine($"this directory \"{dest}\" not exist on your disk!");
+                        File_Entry file = new File_Entry(entry, Program.currentDirectory);
+                        file.Read_File_Content();
+                        file.Print_Content();
                         return;
                     }
                 }
             }
-            else
-            {
-                Console.WriteLine("Error this File is not exist on your computer!");
-                return;
-            }
         }
-        // import source 
-        public static void Importv2(string path)
+        public static void Export_Files(string name)
         {
-            string fullPath;
-            int importedFileCount = 0; 
-
-            // Check if the provided path is absolute or relative file
-            if (System.IO.Path.IsPathRooted(path))
+            if (name.Contains("\\") && name.Contains(".")) // to ensure this is file 
             {
-                fullPath = path; // It's an path
-            }
-            else
-            {
-                // Combine relative file path with the current working directory
-                fullPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), path);
-            }
-
-            if (System.IO.File.Exists(fullPath))
-            {
-                // Import a single file
-                if (ImportSingleFile(fullPath))
+                File_Entry file_exported = MoveToFile(name);
+                if (file_exported == null) // this is mean file not found 
                 {
-                    Console.WriteLine(fullPath);
-                    importedFileCount++;
-                    Console.WriteLine($"\t {importedFileCount} file(s) imported");
-                }
-            }
-            else if (System.IO.Directory.Exists(fullPath)) // Bounce
-            {
-                List<string> files = new List<string>();
-                // Import all .txt files in the directory
-                string[] textFiles = System.IO.Directory.GetFiles(fullPath, "*.txt");
-                if (textFiles.Length == 0)
-                {
-                    Console.WriteLine($"No text files found in the directory: \"{fullPath}\"");
-                }
-                else // files are found
-                {
-                    foreach (var file in textFiles)
-                    {
-                        if (ImportSingleFile(file))
-                        {
-                            files.Add(file);
-                            importedFileCount++;
-                        }
-                    }
-                    foreach (var f in files)
-                    {
-                        Console.WriteLine(f);
-                    }
-                    Console.WriteLine($"\t{importedFileCount} file(s) imported.");
-                }
-            }
-            else
-            {
-                Console.WriteLine($"Could not find file or directory '{fullPath}'");
-                Console.WriteLine($"This file: \"{path}\" does not exist on your computer!");
-            }
-        }
-
-        // Helper method to import a single file
-        private static bool ImportSingleFile(string filePath)
-        {
-            string[] pathParts = filePath.Split('\\');
-            string fileName = pathParts[pathParts.Length - 1]; // get name 
-            string fileContent = System.IO.File.ReadAllText(filePath);
-            if (fileContent.Contains("\0"))
-            {
-                fileContent = fileContent.Replace("\0", " ");
-            }
-            fileContent = fileContent.Trim();
-            int size = fileContent.Length;
-            int index = Program.currentDirectory.search_Directory(fileName);
-            int fc = Mini_FAT.get_Availabel_Cluster();
-
-            if (index == -1) // file not found on my disk
-            {
-                File_Entry f = new File_Entry(fileName.ToCharArray(), 0, fc, size, Program.currentDirectory, fileContent);
-                f.Write_File_Content();
-                Directory_Entry d = new Directory_Entry(fileName.ToCharArray(), 0, f.dir_First_Cluster, size);
-                Program.currentDirectory.DirectoryTable.Add(d);
-                Program.currentDirectory.Write_Directory();
-
-                if (Program.currentDirectory.Parent != null)
-                {
-                    Program.currentDirectory.Update_Content(Program.currentDirectory.Get_Directory_Entry(), Program.currentDirectory.Parent.Get_Directory_Entry());
-                }
-
-                return true; // Successfully imported
-            }
-            else // file found so ask user if want overwrite 
-            {
-                Console.WriteLine($"Error: A file is \"{fileName}\" already exists on your disk!");
-                Console.WriteLine($"NOTE : do you want to overwrite this file: \"{fileName}\" , please enter y for Yes n for No!");
-                string answer = Console.ReadLine();
-                while (answer != "y" || answer != "n")
-                {
-                    if (answer == "y")
-                    {
-                        File_Entry f_in_disk = new File_Entry(Program.currentDirectory.DirectoryTable[index], Program.currentDirectory);
-                        f_in_disk.Read_File_Content();
-                        f_in_disk.content = fileContent;
-                        f_in_disk.dir_FileSize = size;
-                        f_in_disk.Write_File_Content();
-                        return true;
-                    }
-                    if (answer == "n")
-                    {
-                        return false;
-                    }
-                    else
-                    {
-                        Console.WriteLine($"NOTE : do you want to overwrite this file: \"{fileName}\" , please enter y for Yes n for No!");
-                        answer = Console.ReadLine();
-                    }
-                }
-                return false; // Import failed
-            }
-        }
-        #endregion
-        // source 
-        #region Export
-        public static void Export(string name)
-        {
-            //for directory
-            if (name.Contains("\\") && !name.Contains("."))
-            {
-                Directory d = MoveToDir(name, Program.currentDirectory);
-                if (d != null) // dir found
-                {
-                    int cc = 0;
-                    List<string> list = new List<string>();
-                    foreach (var dd in d.DirectoryTable)
-                    {
-                        if (dd.dir_Attr == 0x0) // to ensure it's file with att is 0x0
-                        {
-                            File_Entry f = new File_Entry(dd, d);
-                            f.Read_File_Content();
-                            string fileName = new string(dd.Dir_Namee).Trim();
-                            if (fileName.Contains("\0"))
-                            {
-                                fileName = fileName.Replace("\0", " ");
-                            }
-                            fileName = fileName.Trim();
-                            string exportPath3 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
-                            string content3 = f.content;
-                            if(content3.Contains("\0"))
-                            {
-                                content3 = content3.Replace("\0", " ");
-                            }
-                            content3 = content3.Trim();
-                            File.WriteAllText(exportPath3, content3);
-                            cc++;
-                            string relativePath = new string(d.Dir_Namee) + "\\" + fileName;
-                            list.Add(relativePath);
-                        }
-                        else
-                        {
-                            continue; // att is 0x10 it's dir 
-                        }
-                    }
-                    foreach (var e in list)
-                    {
-                        Console.WriteLine(e);
-                    }
-                    Console.WriteLine($"\t{cc} file(s) exported.");
+                    Console.WriteLine($"this path: \"{name}\" does not exist on your disk!");
                     return;
-
                 }
-                else
+                else // this is mean file is found 
                 {
-                    Console.WriteLine($"this directory \"{name}\" not found");
+                    File_Entry.helpermethod_Exported_In_EXE_File(file_exported, name);
                     return;
                 }
             }
-
-            if (name.Contains("\\") && name.Contains(".")) // for files 
+            else if (name.Contains("\\") && !name.Contains(".")) // this is full path to directory 
             {
-                File_Entry ff = MoveToFile(name);
-                if (ff != null)
+                Directory targetDirectory = MoveToDir(name, Program.currentDirectory);
+                if (targetDirectory == null) // this directory does not exist so errro 
                 {
-                    string namefile = new string(ff.Dir_Namee).Trim();
-                    if (namefile.Contains("\0"))
-                    {
-                        namefile = namefile.Replace("\0", " ");
-                    }
-                    namefile = namefile.Trim();
-                    int fcount2 = 0;
-                    ff.Read_File_Content();
-                    string exportPath2 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, namefile);
-                    string content2 = ff.content;
-                    if(content2.Contains("\0"))
-                    {
-                        content2 = content2.Replace("\0", " ");
-                    }
-                    content2 = content2.Trim();
-                    File.WriteAllText(exportPath2, content2);
-                    fcount2++;
-                    int lastSlashIndex = name.LastIndexOf('\\');
-                    int secondLastSlashIndex = name.LastIndexOf('\\', lastSlashIndex - 1);
-                    string relativePath = name.Substring(secondLastSlashIndex + 1);
-                    Console.WriteLine($"{relativePath}");
-                    Console.WriteLine($"\t{fcount2} file(s) exported.");
+                    Console.WriteLine($"this path :\"{name}\" does not exist on your disk!");
                     return;
                 }
-                else
+                else // we found this directory 
                 {
-                    Console.WriteLine($"this file: \"{name}\" does not exist on your disk!");
-                    return;
-                }
-            }
-
-            // here only file without path 
-            int index = Program.currentDirectory.search_Directory(name);
-            if (index == -1) // File not found
-            {
-                Console.WriteLine($"This file \"{name}\" does not exist on your disk!");
-                return;
-            }
-            Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
-            if (entry.dir_Attr != 0x0) // 0x0 indicates a file 
-            {
-                Directory dir = MoveToDir(name, Program.currentDirectory);
-                if(dir == null)
-                {
-                    Console.WriteLine($"Error this Directory \"{name}\"does not exists on your disk!");
-                    return;
-                }
-                // here is directory without fullpath
-                int cc = 0;
-                List<string> list = new List<string>();
-                foreach (var dd in dir.DirectoryTable)
-                {
-                    if (dd.dir_Attr == 0x0)
+                    List<string> list_Fullpath_Files = new List<string>();
+                    int counter = 0;
+                    foreach (var entry in targetDirectory.DirectoryTable)
                     {
-                        File_Entry f = new File_Entry(dd, Program.currentDirectory);
-                        f.Read_File_Content();
-                        string fileName = new string(dd.Dir_Namee).Trim();
-                        if (fileName.Contains("\0"))
+                        if (entry.dir_Attr == 0x10) // this is directory so don't do anythiing 
                         {
-                            fileName = fileName.Replace("\0", " ");
+                            continue;
                         }
-                        fileName = fileName.Trim();
-                        string exportPath3 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
-                        string content4 = f.content;
-                        if(content4.Contains("\0"))
+                        else // this is file 
                         {
-                            content4 = content4.Replace("\0", " ");
-                        }
-                        content4 = content4.Trim();
-                        File.WriteAllText(exportPath3, content4);
-                        cc++;
-                        string relativePath = new string(Program.currentDirectory.Dir_Namee) + "\\" + fileName;
-                        list.Add(relativePath);
-                    }
-                    else
-                    {
-                        continue;
-                    }
-                }
-                foreach (var e in list)
-                {
-                    Console.WriteLine(e);
-                }
-                Console.WriteLine($"\t{cc} file(s) exported.");
-                return;
-            }
-             
-            // if is only file
-            int fcount = 0;
-            File_Entry file = new File_Entry(entry, Program.currentDirectory);
-            file.Read_File_Content();
-            string content = file.content;
-            if (content.Contains("\0"))
-            {
-                content = content.Replace("\0", " ");
-            }
-            content = content.Trim();
-            string exportPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, name);
-            File.WriteAllText(exportPath, content);
-            fcount++;
-            string currentDirectoryPath = Program.path; // Adjust as needed to get the path like "N:\"
-
-            Console.WriteLine($"{currentDirectoryPath}\\{name}");
-            Console.WriteLine($"\t{fcount} file(s) exported.");
-            return;
-        }
-
-        // done with all test cases
-        public static void Export(string sorc, string dest)
-        {
-            // full path to full path 
-            if (sorc.Contains("\\") && sorc.Contains(".")) // to ensure this is file 
-            {
-                File_Entry ff = MoveToFile(sorc);
-                if (ff != null) // file found
-                {
-                    ff.Read_File_Content();
-                    int cc = 0;
-                    if (dest.Contains("\\") || dest.Contains(".")) // da file 
-                    {
-                        int lastindex_for_Dir = dest.LastIndexOf("\\");
-                        string dest_in_pysical_Disk = dest.Substring(0, lastindex_for_Dir);
-                        if (dest.Contains("."))
-                        {
-                            string dest_in_pysical_Disk_file = dest.Substring(lastindex_for_Dir + 1);
-                            int fc = ff.dir_First_Cluster;
-                            int fz = ff.dir_FileSize;
-                            File_Entry fv2 = new File_Entry(dest_in_pysical_Disk_file.ToCharArray(), ff.dir_Attr, fc, fz, Program.currentDirectory, ff.content);
-                            fv2.Read_File_Content();
-
-                            string content9 = fv2.content;
-                            if(content9.Contains("\0"))
-                            {
-                                content9 = content9.Replace("\0", " ");
-                            }
-                            content9 = content9.Trim();
-                            using (StreamWriter sw = new StreamWriter(dest_in_pysical_Disk + '\\' + dest_in_pysical_Disk_file))
-                            {
-                                sw.WriteLine(content9);
-                            }
-                            cc++;
-                            int lastSlashIndex = sorc.LastIndexOf('\\');
-                            int secondLastSlashIndex = sorc.LastIndexOf('\\', lastSlashIndex - 1);
-                            string relativePath = sorc.Substring(secondLastSlashIndex + 1);
-                            Console.WriteLine($"{relativePath}");
-                            Console.WriteLine($"\t{cc} file(s) exported.");
-                            return;
-
-                        }
-
-                        if (System.IO.Directory.Exists(dest_in_pysical_Disk))
-                        {
-                            string dest_in_pysical_Disk_file = new string(ff.Dir_Namee).Trim();
-                            int fc = ff.dir_First_Cluster;
-                            int fz = ff.dir_FileSize;
-                            File_Entry fv2 = new File_Entry(dest_in_pysical_Disk_file.ToCharArray(), ff.dir_Attr, fc, fz, Program.currentDirectory, ff.content);
-                            fv2.Read_File_Content();
-                            if (dest_in_pysical_Disk_file.Contains("\0"))
-                            {
-                                dest_in_pysical_Disk_file = dest_in_pysical_Disk_file.Replace("\0", " ");
-                            }
-                            dest_in_pysical_Disk_file = dest_in_pysical_Disk_file.Trim();
-                            string content7 = fv2.content;
-                            if(content7.Contains("\0"))
-                            {
-                                content7 = content7.Replace("\0", " ");
-                            }
-                            content7 = content7.Trim();
-                            using (StreamWriter sw = new StreamWriter(dest_in_pysical_Disk + '\\' + dest_in_pysical_Disk_file))
-                            {
-                                sw.WriteLine(content7);
-                            }
-                            cc++;
-                            int lastSlashIndex = sorc.LastIndexOf('\\');
-                            int secondLastSlashIndex = sorc.LastIndexOf('\\', lastSlashIndex - 1);
-                            string relativePath = sorc.Substring(secondLastSlashIndex + 1);
-                            Console.WriteLine($"{relativePath}");
-                            Console.WriteLine($"\t{cc} file(s) exported.");
-                            return;
-                        }
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"this file \"{sorc}\" does not exist on your disk!");
-                    return;
-                }
-            }
-            else
-            {
-                int index = Program.currentDirectory.search_Directory(sorc);
-                if (index != -1) // file found 
-                {
-                    Directory_Entry dd = Program.currentDirectory.DirectoryTable[index];
-                    File_Entry ffv2 = new File_Entry(dd, Program.currentDirectory);
-                    ffv2.Read_File_Content();
-                    int ccv2 = 0;
-                    if (dest.Contains("\\") || dest.Contains(".")) // da file 
-                    {
-                        int lastindex_for_Dir = dest.LastIndexOf("\\");
-                        string dest_in_pysical_Disk = dest.Substring(0, lastindex_for_Dir);
-                        if (dest.Contains("."))
-                        {
-                            string dest_in_pysical_Disk_file = dest.Substring(lastindex_for_Dir + 1);
-                            int fc = ffv2.dir_First_Cluster;
-                            int fz = ffv2.dir_FileSize;
-                            File_Entry fv2 = new File_Entry(dest_in_pysical_Disk_file.ToCharArray(), ffv2.dir_Attr, fc, fz, Program.currentDirectory, ffv2.content);
-                            fv2.Read_File_Content();
-                            string contentf = ffv2.content;
-                            if(contentf.Contains("\0"))
-                            {
-                                contentf = contentf.Replace("\0", " ");
-                            }
-                            contentf = contentf.Trim();
-                            using (StreamWriter sw = new StreamWriter(dest_in_pysical_Disk + '\\' + dest_in_pysical_Disk_file))
-                            {
-                                sw.WriteLine(contentf);
-                            }
-                            ccv2++;
-                            string relativePath = new string(Program.currentDirectory.Dir_Namee) + "\\" + sorc;
-                            Console.WriteLine($"{relativePath}");
-                            Console.WriteLine($"\t{ccv2} file(s) exported.");
-                            return;
-                        }
-                        if (System.IO.Directory.Exists(dest_in_pysical_Disk))
-                        {
-                            int fc = ffv2.dir_First_Cluster;
-                            int fz = ffv2.dir_FileSize;
-                            File_Entry fv2 = new File_Entry(sorc.ToCharArray(), ffv2.dir_Attr, fc, fz, Program.currentDirectory, ffv2.content);
-                            fv2.Read_File_Content();
-                            string content5 = fv2.content;
-                            if(content5.Contains("\0"))
-                            {
-                                content5 = content5.Replace("\0", " ");
-                                
-                            }
-                            content5 = content5.Trim();
-                            using (StreamWriter sw = new StreamWriter(dest_in_pysical_Disk + '\\' + sorc))
-                            {
-                                sw.WriteLine(content5);
-                            }
-                            ccv2++;
-                            string currentDirectoryPath = Program.path; // Adjust as needed to get the path like "N:\"
-                            Console.WriteLine($"{currentDirectoryPath}\\{sorc}");
-                            Console.WriteLine($"\t{ccv2} file(s) exported.");
-                            return;
-                        }
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"this file \"{sorc}\" does not found on your disk");
-                    return;
-                }
-            }
-        }
-        #endregion
-        #region del without any number of argument
-        public static void del(string name)
-        {
-            //fullpath 
-            if (name.Contains("\\") && name.Contains("."))
-            {
-                File_Entry ff = MoveToFile(name);
-                if (ff != null)
-                {
-                    string fname = new string(ff.Dir_Namee);
-                    int opp = name.LastIndexOf('\\');
-                    string move_to_this_dir = name.Substring(0, opp);
-                    Directory d = MoveToDir(move_to_this_dir, Program.currentDirectory);
-                    int index2 = d.search_Directory(fname);
-                    if (index2 != -1) // file found
-                    {
-                        int fc = d.DirectoryTable[index2].dir_First_Cluster;
-                        int sz = d.DirectoryTable[index2].dir_FileSize;
-                        File_Entry file = new File_Entry(fname.ToCharArray(), 0x0, fc, sz, d, ff.content);
-                        Console.Write($"Are you sure that you want to delete \"{name}\", please enter Y for yes or N for no: ");
-                        string answer;
-                        answer = Console.ReadLine();
-                        while (answer != "y" || answer != "n")
-                        {
-                            if (answer == "y")
-                            {
-                                file.Delete_File(fname);
-                                d.Write_Directory();
-                                d.Read_Directory();
-                                if (Program.currentDirectory.Parent != null)
-                                {
-                                    Program.currentDirectory.Update_Content(d, Program.currentDirectory.Parent);
-                                }
-                                return;
-                            }
-                            else if (answer == "n")
-                            {
-                                return;
-                            }
-                            else
-                                Console.Write($"Are you sure that you want to delete \"{name}\", please enter Y for yes or N for no: ");
-                            answer = Console.ReadLine();
-                        }
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"this file : \"{name}\" does not exist on your disk");
-                    return;
-                }
-            }
-            if(!name.Contains("."))
-            {
-                Console.WriteLine($"This file : {name} is not file name or ACCESS DENIE!");
-                return;
-            }
-
-            int index = Program.currentDirectory.search_Directory(name);
-            if (index != -1 && Program.currentDirectory.DirectoryTable[index].dir_Attr == 0x10)
-            {
-                Console.WriteLine($"This file : {name} is not file name or ACCESS DENIE!");
-            }
-            else
-            {
-                if (index != -1)
-                {
-                    int fc = Program.currentDirectory.DirectoryTable[index].dir_First_Cluster;
-                    int sz = Program.currentDirectory.DirectoryTable[index].dir_FileSize;
-                    File_Entry file = new File_Entry(name.ToCharArray(), 0x0, fc, sz, Program.currentDirectory, "");
-                    Console.Write($"Are you sure that you want to delete \"{name}\", please enter Y for yes or N for no: ");
-                    string answer;
-                    answer = Console.ReadLine();
-                    while (answer != "y" || answer != "n")
-                    {
-                        if (answer == "y")
-                        {
-                            file.Delete_File(name);
-                            Program.currentDirectory.Write_Directory();
-                            Program.currentDirectory.Read_Directory();
-                            return;
-                        }
-                        else if (answer == "n")
-                        {
-                            return;
-                        }
-                        else
-                            Console.Write($"Are you sure that you want to delete \"{name}\", please enter Y for yes or N for no: ");
-                        answer = Console.ReadLine();
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"This file : {name} does not exist on your Disk!");
-                }
-            }
-        }//del 
-        #endregion
-        // for only source 
-        public static void Copy(string name)
-        {
-            if (name.Contains("\\")) // this for full path N:\kk\tt.txt
-            {
-                if (name.Contains("\\") && name.Contains("."))
-                {
-                    File_Entry ff = MoveToFile(name);
-                    if (ff == null)
-                    {
-                        Console.WriteLine($"this path \"{name}\" does not exist on your disk!");
-                        return;
-                    }
-                    else
-                    {
-                        ff.Read_File_Content();
-                        // we need take copy to currentDirectory
-                        string fname = new string(ff.Dir_Namee).Trim();
-                        int index3 = Program.currentDirectory.search_Directory(fname);
-                        int count_File_copy = 0;
-                        if (index3 != -1) // this file found in current directory 
-                        {
-                            int last_index_dir = name.LastIndexOf("\\");
-                            string name_dir = name.Substring(0, last_index_dir);
-                            Directory dest = MoveToDir(name_dir, Program.currentDirectory);
-                            int index4 = dest.search_Directory(fname);
+                            File_Entry file_Exported = new File_Entry(entry, targetDirectory); // get object of File_Entry to this file 
+                            file_Exported.Read_File_Content();
+                            string name_File = new string(file_Exported.Dir_Namee).Trim('\0');
+                            string exportedPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, name_File);
+                            string content = file_Exported.content.Replace("\0", " ").Trim();
+                            File.WriteAllText(exportedPath, content);
+                            counter++;
                             string[] pathParts = name.Split('\\'); // Split the path (extract name & size)
-                            string fileName = pathParts[pathParts.Length - 1];
-                            int fc_found = dest.DirectoryTable[index4].dir_First_Cluster;
-                            int fz_found = dest.DirectoryTable[index4].dir_FileSize;
-                            int yy = 0;
-                            File_Entry found = new File_Entry(fname.ToCharArray(), ff.dir_Attr, fc_found, fz_found, Program.currentDirectory, "");
-                            Console.WriteLine($"Error : this file \"{fname}\" is already exists!");
-                            Console.WriteLine($"NOTE : do you want to overwrite this file \"{fname}\" , please enter y for Yes n for No!");
-                            string answer = Console.ReadLine();
-                            while (answer != "y" || answer != "n")
+                            string name_of_File = name_File; // get name of parent file 
+                            string name_Parent_Of_File = pathParts[pathParts.Length - 1]; // get parent directory of this File 
+                            string fullpath_File_Exported = name_Parent_Of_File + "\\" + name_of_File;
+                            list_Fullpath_Files.Add(fullpath_File_Exported);
+                        }
+                    }
+                    foreach (var files in list_Fullpath_Files)
+                    {
+                        Console.WriteLine(files);
+                    }
+                    Console.WriteLine($"\t{counter} file(s) exported.");
+                    return;
+                }
+            }
+            else // here only files without full path or directory without fullpath
+            {
+                int index = Program.currentDirectory.search_Directory(name);
+                if (index == -1) // not found this file or directory
+                {
+                    Console.WriteLine($"This path :\"{name}\" does not exist on your disk!");
+                    return;
+                }
+                else // if found this file or directory 
+                {
+                    // need to check this is directory or file
+                    Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
+                    if (entry.dir_Attr == 0x0) // if this is file 
+                    {
+                        File_Entry file_Exported = new File_Entry(entry, Program.currentDirectory); // get object of this file 
+                        // use helper method to export this file 
+                        File_Entry.helpermethod_Exported_In_EXE_File(file_Exported, name);
+                        return;
+                    }
+                    else // this is directory 
+                    {
+                        Directory targetDirectory = MoveToDir(name, Program.currentDirectory);
+                        if (targetDirectory == null)
+                        {
+                            Console.WriteLine($"this path : \"{name}\"does not exists on your disk!");
+                            return;
+                        }
+                        else // directory found 
+                        {
+                            int counter = 0;
+                            List<string> list = new List<string>();
+                            foreach (var entryFiles in targetDirectory.DirectoryTable)
                             {
-                                if (answer == "y")
+                                if (entryFiles.dir_Attr == 0x10) // this is directory to don't do any thing and continue 
                                 {
-                                    found.content = ff.content;
-                                    found.dir_FileSize = ff.dir_FileSize;
-                                    found.Write_File_Content();
-                                    dest.Write_Directory();
-                                    yy++;
-                                    string fullname = new string(dest.Dir_Namee) + "\\" + fileName;
-                                    Console.WriteLine($"{fullname}");
-                                    Console.WriteLine($"\t{yy} file(s) copied.");
-                                    return;
+                                    continue;
                                 }
-                                if (answer == "n")
+                                else // this is file so export it 
                                 {
-                                    return;
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"NOTE : do you want to overwrite this file \"{fname}\" , please enter y for Yes n for No!");
-                                    answer = Console.ReadLine();
+                                    File_Entry file_Exported = new File_Entry(entryFiles, targetDirectory);
+                                    file_Exported.Read_File_Content();
+                                    string name_File = new string(file_Exported.Dir_Namee).Trim('\0');
+                                    string exportedPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, name_File);
+                                    string content = file_Exported.content;
+                                    if (content.Contains("\0"))
+                                    {
+                                        content = content.Replace("\0", " ");
+                                    }
+                                    content = content.Trim();
+                                    File.WriteAllText(exportedPath, content);
+                                    counter++;
+                                    string name_of_File = name_File;
+                                    string name_Parent_Of_File = new string(targetDirectory.Dir_Namee).Trim('\0');
+                                    string fullpath_File_Exported = name_Parent_Of_File + "\\" + name_of_File;
+                                    list.Add(fullpath_File_Exported);
                                 }
                             }
-                            //Console.WriteLine("The file cannot be copied onto itself.");
-                            Console.WriteLine($"{count_File_copy} file(s) copied.");
+                            foreach (var files in list)
+                            {
+                                Console.WriteLine(files);
+                            }
+                            Console.WriteLine($"\t{counter} file(s) exported.");
                             return;
                         }
-                        else // file not found on current disk
+                    }
+                }
+            }
+        }
+        public static void Export_Files(string source, string destinition)
+        {
+            if (source.Contains("\\") && source.Contains(".")) // to ensure this is fullpath to file
+            {
+                File_Entry file = MoveToFile(source);
+                if (file == null) // this file not found 
+                {
+                    Console.WriteLine($"this path: \"{source}\" does not exist on your disk!");
+                    return;
+                }
+                else // this file is found 
+                {
+                    file.Read_File_Content();
+                    if (destinition.Contains("\\") && destinition.Contains("."))
+                    {
+                        if(File_Entry.CheckerMethod(destinition))
                         {
-                            //for file
-                            int firstcluster = Mini_FAT.get_Availabel_Cluster();
-                            int size = ff.dir_FileSize;
-                            File_Entry c_file = new File_Entry(fname.ToCharArray(), 0x0, firstcluster, size, Program.currentDirectory, ff.content);
-                            c_file.Write_File_Content();
-                            Program.currentDirectory.DirectoryTable.Add(c_file);
-                            count_File_copy++;
-                            Program.currentDirectory.Write_Directory();
-                            int lastSlashIndex = name.LastIndexOf('\\');
-                            int secondLastSlashIndex = name.LastIndexOf('\\', lastSlashIndex - 1);
-                            string relativePath = name.Substring(secondLastSlashIndex + 1); // Get "oo\ninja.txt"
+                            int counter = 0;
+                            File_Entry.helpermethod_Exported_In_Your_Disk(file, destinition);
+                            counter++;
+                            int lastSlashIndex = source.LastIndexOf('\\');
+                            int secondLastSlashIndex = source.LastIndexOf('\\', lastSlashIndex - 1);
+                            string relativePath = source.Substring(secondLastSlashIndex + 1);
                             Console.WriteLine($"{relativePath}");
-                            Console.WriteLine($"{count_File_copy} file(s) copied.");
+                            Console.WriteLine($"\t{counter} file(s) exported.");
                             return;
-
                         }
+                        else
+                        {
+                            Console.WriteLine($"Error : this path {destinition} does not exist on your Copmuter!");
+                            return;
+                        }
+                        
+                    }
+                    else if (destinition.Contains("\\") && !destinition.Contains(".")) // this is fullpath to directory 
+                    {
 
+                        if (System.IO.Directory.Exists(destinition))
+                        {
+                            int counter = 0;
+                            if(File_Entry.CheckerMethod(destinition))
+                            {
+                                File_Entry.helpermethod_Exported_In_Your_Disk(file, destinition);
+                                counter++;
+                                int lastSlashIndex = source.LastIndexOf('\\');
+                                int secondLastSlashIndex = source.LastIndexOf('\\', lastSlashIndex - 1);
+                                string relativePath = source.Substring(secondLastSlashIndex + 1);
+                                Console.WriteLine($"{relativePath}");
+                                Console.WriteLine($"\t{counter} file(s) exported.");
+                                return;
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Error : this path {destinition} does not exist on your Copmuter!");
+                                return;
+                            }
+                            
+                        }
+                        else
+                        {
+                            Console.WriteLine($"this path :\"{destinition}\" does not exist on your computer !");
+                            return;
+                        }
+                    }
+                }
+            }
+            else // if file without fullpath 
+            {
+                int index = Program.currentDirectory.search_Directory(source); // search this file 
+                if (index == -1)
+                {
+                    Console.WriteLine($"this path : \"{source}\" does not found on your disk");
+                    return;
+                }
+                else // if source file is found 
+                {
+                    Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
+                    File_Entry file_Exported = new File_Entry(entry, Program.currentDirectory); // get this file 
+                    if (destinition.Contains("\\") && destinition.Contains("."))
+                    {
+                        int counter = 0;
+                        File_Entry.helpermethod_Exported_In_Your_Disk(file_Exported, destinition);
+                        counter++;
+                        string relativePath = new string(Program.currentDirectory.Dir_Namee).Trim('\0') + "\\" + source;
+                        Console.WriteLine($"{relativePath}");
+                        Console.WriteLine($"\t{counter} file(s) exported.");
+                        return;
+                    }
+                    else if (destinition.Contains("\\") && !destinition.Contains("."))
+                    {
+                        if (System.IO.Directory.Exists(destinition))
+                        {
+                            int counter = 0;
+                            File_Entry.helpermethod_Exported_In_Your_Disk(file_Exported, destinition);
+                            counter++;
+                            string relativePath = new string(Program.currentDirectory.Dir_Namee).Trim('\0') + "\\" + source;
+                            Console.WriteLine($"{relativePath}");
+                            Console.WriteLine($"\t{counter} file(s) exported.");
+                            return;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"this path :\"{destinition}\" does not exist on your computer !");
+                            return;
+                        }
                     }
 
                 }
-                else // this is full path to directory 
+            }
+        }
+        public static void Copy_Source(string source_name)
+        {
+            if(source_name.Contains("\\") && source_name.Contains(".")) // this is mean this is fullpath to file name 
+            {
+                File_Entry file = MoveToFile(source_name); // get this file 
+                if(file == null) // this is mean file not found so copy this file 
                 {
-                    Directory d = MoveToDir(name, Program.currentDirectory);
-                    if (d != null) // this directory is found 
+                    Console.WriteLine($"this path \"{source_name}\" does not exist on your disk!");
+                    return;
+                }
+                else // this file is found so ask user if he want to overwrite this file or not
+                {
+                    // we need to get file name 
+                    string file_Name = new string(file.Dir_Namee);
+                    // ok we need to check in current directory if this fils is found or nor 
+                    int index = Program.currentDirectory.search_Directory(file_Name);
+                    if(index == -1) // mean file not found so copy it without overwrite
                     {
-                        int copy_files = 0;
-                        List<string> copiedFiles = new List<string>(); // To store relative paths of copied files
-                        foreach (Directory_Entry entry in d.DirectoryTable)
-                        {
-                            if (entry.dir_Attr == 0x0)// this is file 
+                        File_Entry.Copy_CreateFile(file, file_Name);
+                        return;
+                    }
+                    else
+                    {
+                        File_Entry.OverWrite(file, file_Name, source_name);
+                        return;
+                    }                    
+                }
+            }
+            else if(source_name.Contains("\\") && !source_name.Contains("."))  // this is mean fullpath to directory
+            {
+                Directory targetDirectory = MoveToDir(source_name, Program.currentDirectory); // get this directory 
+                if(targetDirectory == null) // this directory not found 
+                {
+                    Console.WriteLine($"this path \"{source_name}\" does not exist on your disk!");
+                    return;
+                }
+                else // this directory is found 
+                {
+                    int copied_files = 0;
+                    List<string> files_copied_list = new List<string>();
+
+                    foreach (var entry in targetDirectory.DirectoryTable) // foreach to check all file 
+                    {
+                        if (entry.dir_Attr == 0x0)
+                        {                            
+                            string file_Name = new string(entry.Dir_Namee).Trim();
+                            int index_Search = Program.currentDirectory.search_Directory(file_Name);
+                            if (index_Search != -1) // file found in current
                             {
-                                string file_Name = new string(entry.Dir_Namee).Trim();
+                                Console.WriteLine($"Error : this file \"{file_Name}\" is already exists!");
+                                Console.WriteLine($"NOTE : do you want to overwrite this file \"{file_Name}\" , please enter y for Yes n for No!");
+                                string answer = Console.ReadLine();
+                                while (answer != "y" || answer != "n")
+                                {
+                                    if (answer == "y")
+                                    {
+                                        File_Entry existingFile = new File_Entry(Program.currentDirectory.DirectoryTable[index_Search], Program.currentDirectory);
+                                        File_Entry sourceFile = new File_Entry(entry, targetDirectory);
+                                        sourceFile.Read_File_Content(); // Load content from source
+                                        existingFile.content = sourceFile.content;
+                                        existingFile.dir_FileSize = sourceFile.dir_FileSize;
+                                        existingFile.Write_File_Content(); // Overwrite the content
+                                        copied_files++;
+                                        string name_Directory = new string(targetDirectory.Dir_Namee) + "\\" + file_Name;
+                                        files_copied_list.Add(name_Directory);
+                                        break;
+                                    }
+                                    if (answer == "n")
+                                    {
+                                        break;
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"NOTE : do you want to overwrite this file \"{file_Name}\" , please enter y for Yes n for No!");
+                                        answer = Console.ReadLine();
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                File_Entry file = new File_Entry(entry, targetDirectory);
+                                file.Read_File_Content();
+                                int first_Cluster = Mini_FAT.get_Availabel_Cluster();
+                                File_Entry file_copied = new File_Entry(file_Name.ToCharArray(), file.dir_Attr, first_Cluster, file.dir_FileSize, Program.currentDirectory, file.content);
+                                file_copied.Write_File_Content();
+                                copied_files++;
+                                Program.currentDirectory.DirectoryTable.Add(file_copied);
+                                Program.currentDirectory.Write_Directory();
+                                string name_Directory = new string(targetDirectory.Dir_Namee) + "\\" + file_Name;
+                                files_copied_list.Add(name_Directory);
+                            }
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+                    foreach (var items in files_copied_list)
+                    {
+                        Console.WriteLine(items);
+                    }
+                    Console.WriteLine($"\t{copied_files} file(s) copied.");
+                    return;
+                }
+            }
+            else
+            {
+                int index = Program.currentDirectory.search_Directory(source_name);
+                if(index == -1) // this mean file not found 
+                {
+                    Console.WriteLine($"this file \"{source_name}\" does not exist on your disk!");
+                    return;
+                }
+                else // this mean file is found 
+                {
+                    Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
+                    int copy_files = 0;
+                    List<string> files_copied_list = new List<string>();
+
+                    if (entry.dir_Attr == 0x10) // this is directory 
+                    {
+                        Directory targetDirectory = new Directory(entry.Dir_Namee, entry.dir_Attr, entry.dir_First_Cluster, Program.currentDirectory);
+                        targetDirectory.Read_Directory();
+                        foreach (var entryFiles in targetDirectory.DirectoryTable)
+                        {
+                            if (entryFiles.dir_Attr == 0x0)
+                            {                                
+                                string file_Name = new string(entryFiles.Dir_Namee).Trim();
                                 int index_Search = Program.currentDirectory.search_Directory(file_Name);
                                 if (index_Search != -1) // file found in current
                                 {
@@ -1691,13 +1411,15 @@ namespace OS_Simple_Shell
                                         if (answer == "y")
                                         {
                                             File_Entry existingFile = new File_Entry(Program.currentDirectory.DirectoryTable[index_Search], Program.currentDirectory);
-                                            File_Entry sourceFile = new File_Entry(entry, d);
+                                            File_Entry sourceFile = new File_Entry(entryFiles, targetDirectory);
+
                                             sourceFile.Read_File_Content(); // Load content from source
                                             existingFile.content = sourceFile.content;
                                             existingFile.dir_FileSize = sourceFile.dir_FileSize;
                                             existingFile.Write_File_Content(); // Overwrite the content
                                             copy_files++;
-                                            copiedFiles.Add($"{new string(d.Dir_Namee).Trim()}\\{file_Name}"); // Add relative path
+                                            string name_Directory = new string(targetDirectory.Dir_Namee) + "\\" + file_Name;
+                                            files_copied_list.Add(name_Directory);
                                             break;
                                         }
                                         if (answer == "n")
@@ -1711,17 +1433,18 @@ namespace OS_Simple_Shell
                                         }
                                     }
                                 }
-                                else
+                                else // file not found so copy it 
                                 {
-                                    File_Entry f = new File_Entry(entry, d);
+                                    File_Entry f = new File_Entry(entryFiles, targetDirectory);
                                     f.Read_File_Content();
-
                                     int avc = Mini_FAT.get_Availabel_Cluster();
                                     File_Entry fv2 = new File_Entry(file_Name.ToCharArray(), f.dir_Attr, avc, f.dir_FileSize, Program.currentDirectory, f.content);
                                     fv2.Write_File_Content();
                                     copy_files++;
                                     Program.currentDirectory.DirectoryTable.Add(fv2);
                                     Program.currentDirectory.Write_Directory();
+                                    string name_Directory = new string(targetDirectory.Dir_Namee) + "\\" + file_Name;
+                                    files_copied_list.Add(name_Directory);
                                 }
                             }
                             else
@@ -1729,571 +1452,222 @@ namespace OS_Simple_Shell
                                 continue;
                             }
                         }
-                        Program.currentDirectory.Write_Directory();
-                        foreach (string file in copiedFiles)
+                        foreach (var items in files_copied_list)
                         {
-                            Console.WriteLine(file);
+                            Console.WriteLine(items);
                         }
-                        Console.WriteLine($"\t{copy_files} file(s) copied.");
-                        return;
+                        Console.WriteLine($"{copy_files} file(s) copied.");
                     }
-                    else // dir not found
+                    else // this is file and file is found so ask user if want to overwrite this file or not 
                     {
-                        Console.WriteLine($"this path \"{name}\" does not exist on your disk!");
-                        return;
-                    }
-                }
-
-            }
-
-            int index = Program.currentDirectory.search_Directory(name);
-            if (index == -1)
-            {
-                Console.WriteLine($"this file \"{name}\" does not exist on your disk!");
-                return;
-            }
-            else
-            {
-                // first check if this index is File or Directory 
-                Directory_Entry dd = Program.currentDirectory.DirectoryTable[index];
-                if (dd.dir_Attr == 0x10) // this is Directory 
-                {
-                    Directory d = new Directory(dd.Dir_Namee, dd.dir_Attr, dd.dir_First_Cluster, Program.currentDirectory);
-                    d.Read_Directory();
-                    int copy_files = 0;
-                    foreach (Directory_Entry e in d.DirectoryTable)
-                    {
-                        if (e.dir_Attr == 0x0) // this is file
-                        {
-                            string file_Name = new string(e.Dir_Namee).Trim();
-                            int index_Search = Program.currentDirectory.search_Directory(file_Name);
-                            if (index_Search != -1) // file found in current
-                            {
-                                Console.WriteLine($"Error : this file \"{file_Name}\" is already exists!");
-                                Console.WriteLine($"NOTE : do you want to overwrite this file \"{file_Name}\" , please enter y for Yes n for No!");
-                                string answer = Console.ReadLine();
-                                while (answer != "y" || answer != "n")
-                                {
-                                    if (answer == "y")
-                                    {
-                                        File_Entry existingFile = new File_Entry(Program.currentDirectory.DirectoryTable[index_Search], Program.currentDirectory);
-                                        File_Entry sourceFile = new File_Entry(e, d);
-
-                                        sourceFile.Read_File_Content(); // Load content from source
-                                        existingFile.content = sourceFile.content;
-                                        existingFile.dir_FileSize = sourceFile.dir_FileSize;
-                                        existingFile.Write_File_Content(); // Overwrite the content
-                                        copy_files++;
-                                        break;
-                                    }
-                                    if (answer == "n")
-                                    {
-                                        break;
-                                    }
-                                    else
-                                    {
-                                        Console.WriteLine($"NOTE : do you want to overwrite this file \"{file_Name}\" , please enter y for Yes n for No!");
-                                        answer = Console.ReadLine();
-                                    }
-
-                                }
-
-                            }
-                            else // file not found so copy it 
-                            {
-                                File_Entry f = new File_Entry(e, d);
-                                f.Read_File_Content();
-                                int avc = Mini_FAT.get_Availabel_Cluster();
-                                File_Entry fv2 = new File_Entry(file_Name.ToCharArray(), f.dir_Attr, avc, f.dir_FileSize, Program.currentDirectory, f.content);
-                                fv2.Write_File_Content();
-                                copy_files++;
-                                Program.currentDirectory.DirectoryTable.Add(fv2);
-                                Program.currentDirectory.Write_Directory();
-                            }
-
-                        }
-                        else
-                        {
-                            continue;
-                        }
-                    }
-                    Program.currentDirectory.Write_Directory();
-                    string currentDirectoryPath = Program.path; // Adjust as needed to get the path like "N:\"
-                    Console.WriteLine($"{currentDirectoryPath}\\{name}");
-                    Console.WriteLine($"{copy_files} file(s) copied.");
-                }
-                else // this is File 
-                {
-                    int cc = 0;
-                    Console.WriteLine($"Error: The file \"{name}\" already exists in the current directory.");
-                    Console.WriteLine($"NOTE: Do you want to overwrite this file \"{name}\"? Please enter y for Yes or n for No!");
-                    string answer = Console.ReadLine();
-                    while (answer != "n" || answer != "y")
-                    {
-                        if (answer == "y")
-                        {
-                            File_Entry existingFile = new File_Entry(Program.currentDirectory.DirectoryTable[index], Program.currentDirectory);
-                            File_Entry sourceFile = new File_Entry(dd, Program.currentDirectory);
-                            sourceFile.Read_File_Content(); // Load content from source
-                            existingFile.content = sourceFile.content;
-                            existingFile.dir_FileSize = sourceFile.dir_FileSize;
-                            existingFile.Write_File_Content();
-                            cc++;
-                            Console.WriteLine($"{cc} file(s) copied.");
-                            return;
-                        }
-                        else if (answer == "n")
-                        {
-                            return;
-                        }
-                        else
-                            Console.WriteLine($"NOTE: Do you want to overwrite this file \"{name}\"? Please enter y for Yes or n for No!");
-                        answer = Console.ReadLine();
+                        File_Entry file_Copied = new File_Entry(entry, Program.currentDirectory);
+                        string name_Of_Directoy = new string(Program.currentDirectory.Dir_Namee);
+                        File_Entry.OverWrite(file_Copied, source_name, name_Of_Directoy);
                     }
                 }
             }
         }
-        // for source and des
-        public static void Copy(string name, string des)
+        public static void CopyMethod(string source_Name, string destinition_Name)
         {
-            // Locate the source file (name) full path done
-            if (name.Contains("\\"))
+            // first if source is fullpath 
+            if(source_Name.Contains("\\") && !source_Name.Contains(".") || !source_Name.Contains("\\") && !source_Name.Contains("."))
             {
-                File_Entry ff = MoveToFile(name);
-                Directory dest = MoveToDir(des, Program.currentDirectory);
-                if (ff == null)
-                {
-                    Console.WriteLine($"this path \"{name}\" does not exist on your disk!");
-                    return;
-                }
-                if (dest != null) // this is Directory 
-                {
-                    string src_File = new string(ff.Dir_Namee).Trim();
-                    int index_src = dest.search_Directory(src_File);
-                    if (index_src == -1) // File not found so copy it
-                    {
-                        ff.Read_File_Content();
-                        int fc = 0;
-                        int f_clus = Mini_FAT.get_Availabel_Cluster();
-                        File_Entry nn = new File_Entry(src_File.ToCharArray(), ff.dir_Attr, f_clus, ff.dir_FileSize, dest, ff.content);
-                        nn.Write_File_Content();
-                        dest.DirectoryTable.Add(nn);
-                        fc++;
-                        dest.Write_Directory();
-                        Console.WriteLine($"{fc} file(s) copied.");
-                        return;
-                    }
-                    else
-                    {
-                        int fc_found = dest.DirectoryTable[index_src].dir_First_Cluster;
-                        int fz_found = dest.DirectoryTable[index_src].dir_FileSize;
-                        int yy = 0;
-                        File_Entry found = new File_Entry(src_File.ToCharArray(), ff.dir_Attr, fc_found, fz_found, dest, "");
-                        Console.WriteLine($"Error : this file \"{src_File}\" is already exists!");
-                        Console.WriteLine($"NOTE : do you want to overwrite this file \"{src_File}\" , please enter y for Yes n for No!");
-                        string answer = Console.ReadLine();
-                        while (answer != "y" || answer != "n")
-                        {
-                            if (answer == "y")
-                            {
-                                found.content = ff.content;
-                                found.dir_FileSize = ff.dir_FileSize;
-                                found.Write_File_Content();
-                                dest.Write_Directory();
-                                yy++;
-                                Console.WriteLine($"\t{yy} file(s) copied.");
-                                return;
-                            }
-                            if (answer == "n")
-                            {
-                                return;
-                            }
-                            else
-                            {
-                                Console.WriteLine($"NOTE : do you want to overwrite this file \"{src_File}\" , please enter y for Yes n for No!");
-                                answer = Console.ReadLine();
-                            }
-                        }
-                        return;
-                    }
-                }
-                else
-                {
-                    // here if Destinition file 
-                    if (des.Contains("\\")) // fullpath to file 
-                    {
-                        File_Entry pp = MoveToFile(des);
-                        int lastindex_forname = des.LastIndexOf("\\");
-                        string ddd = des.Substring(0, lastindex_forname);
-                        Directory d = MoveToDir(ddd, Program.currentDirectory);
-                        string namedis = des.Substring(lastindex_forname + 1);
-                        if (pp == null) // this file in destinition not found so copy it
-                        {
-                            if (d == null)
-                            {
-                                Console.WriteLine($"Error: Directory \"{des}\" not found.");
-                                return;
-                            }
-                            int index = d.search_Directory(namedis);
-                            if (index != -1)
-                            {
-                                Console.WriteLine("Error: File already exists at the destination.");
-                                return;
-                            }
-                            ff.Read_File_Content();
-                            int f_count = 0;
-                            int f_clusert = Mini_FAT.get_Availabel_Cluster();
-                            File_Entry hh = new File_Entry(namedis.ToCharArray(), ff.dir_Attr, f_clusert, ff.dir_FileSize, d, ff.content);
-                            hh.Write_File_Content();
-                            d.DirectoryTable.Add(hh);
-                            d.Write_Directory();
-                            f_count++;
-                            Program.currentDirectory.Write_Directory();
-                            Console.WriteLine($"{f_count} file(s) copied.");
-                            return;
-                        }
-                        else // mean this file in destinition is found so ask user to ovwerwrite or not 
-                        {
-                            ff.Read_File_Content();
-                            string[] pathParts = name.Split('\\'); // Split the path (extract name & size)
-                            string fileName = pathParts[pathParts.Length - 1];
-                            int index_D = d.search_Directory(fileName);
-                            Console.WriteLine($"this file \"{fileName}\" is already exist on your disk!");
-                            Console.WriteLine($"NOTE: Do you want to overwrite this file \"{fileName}\"? Please enter y for Yes or n for No!");
-                            int fc_Soruce = d.DirectoryTable[index_D].dir_First_Cluster;
-                            int fz_Source = d.DirectoryTable[index_D].dir_FileSize;
-                            int c = 0;
-                            File_Entry ee = new File_Entry(fileName.ToCharArray(), 0x0, fc_Soruce, fz_Source, d, "");
-                            string answer = Console.ReadLine();
-                            while (answer != "y" || answer != "n")
-                            {
-                                if (answer == "y")
-                                {
-                                    ee.content = ff.content;
-                                    ee.dir_FileSize = ff.dir_FileSize;
-                                    ee.Write_File_Content();
-                                    c++;
-                                    Console.WriteLine($"{c} file(s) copied.");
-                                    return;
-                                }
-                                else if (answer == "n")
-                                {
-                                    break;
-                                }
-                            }
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        ff.Read_File_Content();
-                        int f_count = 0;
-                        int index3 = Program.currentDirectory.search_Directory(des);
-                        if (index3 == -1)
-                        {
-                            int f_cluster = Mini_FAT.get_Availabel_Cluster();
-                            File_Entry gg = new File_Entry(des.ToCharArray(), ff.dir_Attr, f_cluster, ff.dir_FileSize, Program.currentDirectory, ff.content);
-                            gg.Write_File_Content();
-                            Program.currentDirectory.DirectoryTable.Add(gg);
-                            f_count++;
-                            Program.currentDirectory.Write_Directory();
-                            int lastSlashIndex = name.LastIndexOf('\\');
-                            int secondLastSlashIndex = name.LastIndexOf('\\', lastSlashIndex - 1);
-                            string relativePath = name.Substring(secondLastSlashIndex + 1); // Get "oo\ninja.txt"
-                            Console.WriteLine($"{relativePath}");
-                            Console.WriteLine($"{f_count} file(s) copied.");
-                            return;
-                        }
-                        else
-                        {
-                            int fc_found = Program.currentDirectory.DirectoryTable[index3].dir_First_Cluster;
-                            int fz_found = Program.currentDirectory.DirectoryTable[index3].dir_FileSize;
-                            int yy = 0;
-                            File_Entry found = new File_Entry(des.ToCharArray(), ff.dir_Attr, fc_found, fz_found, Program.currentDirectory, "");
-                            found.Read_File_Content();
-                            Console.WriteLine($"Error : this file \"{des}\" is already exists!");
-                            Console.WriteLine($"NOTE : do you want to overwrite this file \"{des}\" , please enter y for Yes n for No!");
-                            string answer = Console.ReadLine();
-                            while (answer != "y" || answer != "n")
-                            {
-                                if (answer == "y")
-                                {
-                                    found.content = ff.content;
-                                    found.dir_FileSize = ff.dir_FileSize;
-                                    found.Write_File_Content();
-                                    Program.currentDirectory.Write_Directory();
-                                    yy++;
-                                    Console.WriteLine($"\t{yy} file(s) copied.");
-                                    return;
-                                }
-                                if (answer == "n")
-                                {
-                                    return;
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"NOTE : do you want to overwrite this file \"{des}\" , please enter y for Yes n for No!");
-                                    answer = Console.ReadLine();
-                                }
-                            }
-                            Console.WriteLine($"\t{yy} file copied.");
-                            return;
-                        }
-                    }
-                }
+                if(destinition_Name.Contains("\\") && !destinition_Name.Contains(".") || !destinition_Name.Contains("\\") && !destinition_Name.Contains("."))
+                Console.WriteLine("This is Bonus ... !");
+                return;
             }
-            else
+            // first if Source is full path to file 
+            if(source_Name.Contains("\\") && source_Name.Contains(".")) // to ensure this is file
             {
-                // source file without full path 
-                int index1 = Program.currentDirectory.search_Directory(name);
-                if (index1 != -1) // source file are found 
+                File_Entry File = MoveToFile(source_Name); // get this file 
+                if(File == null) // if this File not Found 
                 {
-                    Directory_Entry d = Program.currentDirectory.DirectoryTable[index1];
-                    File_Entry fd = new File_Entry(d, Program.currentDirectory);
-                    //file name to fullpath file name 
-                    if (des.Contains(".") && des.Contains("\\")) // mean file name to fullpath file name 
-                    {
-                        File_Entry ef = MoveToFile(des);
-                        if (ef != null) // destinition file found 
-                        {
-                            fd.Read_File_Content();
-                            int in_for_dire = des.LastIndexOf("\\");
-                            string name_to_dir = des.Substring(0, in_for_dire);
-                            Directory dd = MoveToDir(name_to_dir, Program.currentDirectory);
-                            string[] pathParts = des.Split('\\'); // Split the path (extract name & size)
-                            string fileName = pathParts[pathParts.Length - 1];
-                            int index_file_destinition = dd.search_Directory(fileName);
-                            Console.WriteLine($"Error : this file \"{fileName}\" is already exists!");
-                            Console.WriteLine($"NOTE : do you want to overwrite this file \"{fileName}\" , please enter y for Yes n for No!");
-                            int fc_found = dd.DirectoryTable[index_file_destinition].dir_First_Cluster;
-                            int fz_found = dd.DirectoryTable[index_file_destinition].dir_FileSize;
-                            int c = 0;
-                            File_Entry found = new File_Entry(fileName.ToCharArray(), 0x0, fc_found, fz_found, dd, "");
-                            found.Read_File_Content();
-                            string answer = Console.ReadLine();
-                            while (answer != "y" || answer != "n")
-                            {
-                                if (answer == "y")
-                                {
-                                    found.content = fd.content;
-                                    found.dir_FileSize = fd.dir_FileSize;
-                                    found.Write_File_Content();
-                                    dd.Write_Directory();
-                                    c++;
-                                    Console.WriteLine($"{c} file(s) copied");
-                                    return;
-                                }
-                                else if (answer == "n")
-                                {
-                                    return;
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"NOTE : do you want to overwrite this file \"{name}\" , please enter y for Yes n for No!");
-                                    answer = Console.ReadLine();
-                                }
-                            }
-                            Console.WriteLine($"{c} file(s) copied.");
-                            return;
-                        }
-                        else // destinition file not found 
-                        {
-                            // need to split to get directory 
-                            int in_for_dire = des.LastIndexOf("\\");
-                            string name_to_dir = des.Substring(0, in_for_dire);
-                            Directory dd = MoveToDir(name_to_dir, Program.currentDirectory);
-                            if (dd == null) // dire not found
-                            {
-                                Console.WriteLine($"Error : this path \"{des}\" does not exist on your disk");
-                            }
-                            else // dire found 
-                            {
-                                fd.Read_File_Content();
-                                string[] pathParts = des.Split('\\'); // Split the path 
-                                string fileName = pathParts[pathParts.Length - 1];
-                                int f_c = 0;
-                                int fcluster = Mini_FAT.get_Availabel_Cluster();
-                                int file_size = fd.dir_FileSize;
-
-                                File_Entry ee = new File_Entry(fileName.ToCharArray(), 0x0, fcluster, file_size, dd, fd.content);
-                                ee.Write_File_Content();
-                                dd.DirectoryTable.Add(ee);
-                                dd.Write_Directory();
-                                f_c++;
-                                Program.currentDirectory.Write_Directory();
-                                Console.WriteLine($"{f_c} file(s) copied.");
-                                return;
-                            }
-                        }
-                    }
-                    Directory dest = MoveToDir(des, Program.currentDirectory);
-                    fd.Read_File_Content();
-                    // test case 13
-                    if (dest != null && dest.dir_Attr == 0x10) // this is Directory 
-                    {
-                        string src_File = new string(fd.Dir_Namee).Trim();
-                        int index_src = dest.search_Directory(src_File);
-                        if (index_src == -1) // File not found so copy it
-                        {
-                            fd.Read_File_Content();
-                            int fc = 0;
-                            int f_clus = Mini_FAT.get_Availabel_Cluster();
-                            File_Entry nn = new File_Entry(name.ToCharArray(), fd.dir_Attr, f_clus, fd.dir_FileSize, dest, fd.content);
-                            nn.Write_File_Content();
-                            dest.DirectoryTable.Add(nn);
-                            dest.Write_Directory();
-                            fc++;
-                            Program.currentDirectory.Write_Directory();
-                            string currentDirectoryPath = Program.path; // Adjust as needed to get the path like "N:\"
-                            Console.WriteLine($"{currentDirectoryPath}\\{src_File}");
-                            Console.WriteLine($"\t{fc} file(s) copied.");
-                            return;
-                        }
-                        else
-                        {
-                            Console.WriteLine($"The file \"{src_File}\" is already exist in your disk!");
-                            Console.WriteLine($"NOTE : do you want to overwrite this file \"{src_File}\" , please enter y for Yes n for No!");
-                            File_Entry found = new File_Entry(dest.DirectoryTable[index_src], dest);
-                            found.Read_File_Content();
-                            int ds = 0;
-                            string answer = Console.ReadLine();
-                            while (answer != "y" || answer != "n")
-                            {
-                                if (answer == "y")
-                                {
-                                    found.content = fd.content;
-                                    found.dir_FileSize = fd.dir_FileSize;
-                                    found.Write_File_Content();
-                                    Program.currentDirectory.Write_Directory();
-                                    ds++;
-                                    break;
-                                }
-                                if (answer == "n")
-                                {
-                                    return;
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"NOTE : do you want to overwrite this file \"{src_File}\" , please enter y for Yes n for No!");
-                                    answer = Console.ReadLine();
-                                }
-                            }
-                            Console.WriteLine($"\t{ds} file(s) copied.");
-                            return;
-                        }
-                    }
-                    int fil_c = 0;
-                    // fullpath Destinition 
-                    if (des.Contains("\\"))
-                    {
-                        File_Entry pp = MoveToFile(des);
-                        int lastindex_forname = des.LastIndexOf("\\");
-                        string ddd = des.Substring(0, lastindex_forname);
-                        Directory dd = MoveToDir(ddd, Program.currentDirectory);
-                        string namedis = des.Substring(lastindex_forname + 1);
-                        if (pp == null)
-                        {
-                            if (d == null)
-                            {
-                                Console.WriteLine($"Error: Directory \"{des}\" not found.");
-                                return;
-                            }
-                            int index = dd.search_Directory(namedis);
-                            if (index != -1)
-                            {
-                                Console.WriteLine("Error: File already exists at the destination.");
-                                return;
-                            }
-                            fd.Read_File_Content();
-                            int f_count = 0;
-                            int f_clusert = Mini_FAT.get_Availabel_Cluster();
-                            File_Entry hh = new File_Entry(namedis.ToCharArray(), fd.dir_Attr, f_clusert, fd.dir_FileSize, dd, fd.content);
-                            hh.Write_File_Content();
-                            dd.DirectoryTable.Add(hh);
-                            dd.Write_Directory();
-                            f_count++;
-                            Program.currentDirectory.Write_Directory();
-                            Console.WriteLine($"{f_count} file(s) copied.");
-                            return;
-                        }
-                        else
-                        {
-                            int index2 = Program.currentDirectory.search_Directory(des);
-                            if (index2 == -1)
-                            {
-                                int fc = Mini_FAT.get_Availabel_Cluster();
-                                File_Entry gg = new File_Entry(des.ToCharArray(), fd.dir_Attr, fc, fd.dir_FileSize, Program.currentDirectory, fd.content);
-                                gg.Write_File_Content();
-                                Program.currentDirectory.DirectoryTable.Add(gg);
-                                fil_c++;
-                                Program.currentDirectory.Write_Directory();
-                                Console.WriteLine($"{fil_c} file(s) copied.");
-                                return;
-                            }
-                            else
-                            {
-                                Console.WriteLine("des is exist !");
-                                return;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        int indexdes = Program.currentDirectory.search_Directory(des);
-                        if (indexdes == -1) // file not found 
-                        {
-                            int fc = Mini_FAT.get_Availabel_Cluster();
-                            File_Entry gg = new File_Entry(des.ToCharArray(), fd.dir_Attr, fc, fd.dir_FileSize, Program.currentDirectory, fd.content);
-                            gg.Write_File_Content();
-                            Program.currentDirectory.DirectoryTable.Add(gg);
-                            fil_c++;
-                            Program.currentDirectory.Write_Directory();
-                            Console.WriteLine($"{fil_c} file(s) copied.");
-                            return;
-                        }
-                        else // file found 
-                        {
-                            fd.Read_File_Content();
-                            Console.WriteLine($"this file \"{des}\" is already exist on your disk!");
-                            Console.WriteLine($"NOTE : do you want to overwrite this file \"{des}\" , please enter y for Yes n for No!");
-                            int fc = Program.currentDirectory.DirectoryTable[indexdes].dir_First_Cluster;
-                            int fz = Program.currentDirectory.DirectoryTable[indexdes].dir_FileSize;
-                            int x = 0;
-                            File_Entry os = new File_Entry(des.ToCharArray(), 0x0, fc, fz, Program.currentDirectory, "");
-                            os.Read_File_Content();
-                            string answer = Console.ReadLine();
-                            while (answer != "y" || answer != "no")
-                            {
-                                if (answer == "y")
-                                {
-                                    os.content = fd.content;
-                                    os.dir_FileSize = fd.dir_FileSize;
-                                    os.Write_File_Content();
-                                    Program.currentDirectory.Write_Directory();
-                                    x++;
-                                    Console.WriteLine($"{x} file(s) copied.");
-                                    return;
-                                }
-                                else if (answer == "n")
-                                {
-                                    return;
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"NOTE : do you want to overwrite this file \"{des}\" , please enter y for Yes n for No!");
-                                    answer = Console.ReadLine();
-                                }
-                            }
-                            return;
-                        }
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"this path \"{name}\" does not exist on your disk!");
+                    Console.WriteLine($"this path \"{source_Name}\" does not exist on your disk!");
                     return;
                 }
+                if(destinition_Name.Contains("\\") && !destinition_Name.Contains (".")) // here is destinition is fullpath to directory 
+                {
+                    Directory directory_Distinition = MoveToDir(destinition_Name, Program.currentDirectory);
+                    if (directory_Distinition != null) // this is mean we copy file to directory 
+                    {
+                        // we need to ensure if this file is found in this directory or not 
+                        // so get this file name 
+                        string name_of_File = new string(File.Dir_Namee);
+                        int index = directory_Distinition.search_Directory(name_of_File); // and search for it 
+                        if (index != -1) // this mean file is found so ask user if want to overwrite it or not with help method OverWrite in Class File_Entry 
+                        {
+                            File_Entry.OverWrite(File, name_of_File, destinition_Name); // this method help us to overwrite or not 
+                            return;
+                        }
+                        else
+                        {
+                            File_Entry.Copy_CreateFile(File,destinition_Name);
+                            return;
+                        }
+                    }
+                }
+                else if(destinition_Name.Contains("\\") && destinition_Name.Contains(".")) // here is destinition is fullpath to file  
+                {
+                    // first we need to check if file is exist here or not 
+                    File_Entry File_Destiniton_Copy = MoveToFile(destinition_Name);
+                    if(File_Destiniton_Copy != null ) // here this is mean this file are Found
+                    {
+                        // so ask user if he want to overwrite this file or not with help function overwrite in class File_Entry
+                        string name_File_will_copyied = new string(File_Destiniton_Copy.Dir_Namee); // get name of file 
+                        File_Entry.OverWrite(File_Destiniton_Copy, name_File_will_copyied, destinition_Name); // method help us to overwrite
+                    }
+                    else // here this is mean file not found 
+                    {
+                        // First get name of Destinition file 
+                        int last_index_for_name = destinition_Name.LastIndexOf("\\"); 
+                        string name_of_Directory = destinition_Name.Substring(0, last_index_for_name); // get fullpath of parent of this file 
+                        Directory targetDirectory = MoveToDir(name_of_Directory, Program.currentDirectory); // move to this directory
 
+                        if (targetDirectory == null) // this is mean directory is null and path is error
+                        {
+                            Console.WriteLine($"this path \"{destinition_Name}\" does not exist on your disk!");
+                            return;
+                        }
+                        else // we found this directory 
+                        {
+                            File_Entry.Copy_CreateFile(File, destinition_Name);
+                            return;
+                        }
+                    }
+                }
+                else // if destinition is file without fullpath 
+                {
+                    
+                    int index = Program.currentDirectory.search_Directory(destinition_Name);
+                    if (index != -1) // this is mean File are found 
+                    {
+                        // so ask user if he want to overwrite this file or not 
+                        string name_Of_Directory = new string(Program.currentDirectory.Dir_Namee); // get name of Directory 
+                        File_Entry.OverWrite(File, destinition_Name, name_Of_Directory);
+                    }
+                    else // here if file not found so copy it 
+                    {
+                        int lastSlashIndex = source_Name.LastIndexOf('\\');
+                        int secondLastSlashIndex = source_Name.LastIndexOf('\\', lastSlashIndex - 1);
+                        string relativePath = source_Name.Substring(secondLastSlashIndex + 1); 
+                        Console.WriteLine($"{relativePath}");
+                        File_Entry.Copy_CreateFile(File, destinition_Name);
+                        return;
+                    }
+                }                            
+            }
+            else // else for source without fullpath if not contain \ and . 
+            {
+                int index = Program.currentDirectory.search_Directory(source_Name); // search for index if this file is found or not 
+                if(index == -1 ) // source file not found on disk 
+                {
+                    Console.WriteLine($"this path \"{source_Name}\" does not exist on your disk!");
+                    return;
+                }
+                else // source file is found 
+                {
+                    // first if destinition is fullpath to file 
+                    if(destinition_Name.Contains(".") && destinition_Name.Contains("\\")) 
+                    {
+                        File_Entry file_Of_Destinition = MoveToFile(destinition_Name);
+                        if(file_Of_Destinition != null ) // this file is exist with this same name 
+                        {
+                            // so ask user if want to overwrite or not 
+                            // we need to get name of directory of this file 
+                            File_Entry.OverWrite(file_Of_Destinition, source_Name, destinition_Name);
+                        }
+                        else // here if file not found 
+                        {
+                            // we need to get directory name by split this fullpath 
+                            int last_index_for_name = destinition_Name.LastIndexOf("\\");
+                            string name_of_Directory = destinition_Name.Substring(0, last_index_for_name); // get fullpath of parent of this file 
+                            Directory targetDirectory = MoveToDir(name_of_Directory, Program.currentDirectory);
+                            Directory_Entry Dire_OR_Files = Program.currentDirectory.DirectoryTable[index];                                                       
+                            File_Entry file_Copied = new File_Entry(Dire_OR_Files, targetDirectory);
+                            File_Entry.Copy_CreateFile(file_Copied, destinition_Name);                            
+                        }
+                    }
+                    else if(destinition_Name.Contains("\\") && !destinition_Name.Contains("."))// if destinition is fullpath to directory 
+                    {
+                        // so we need to search this directory if found 
+                        Directory targetDirectory = MoveToDir(destinition_Name, Program.currentDirectory);
+                        if(targetDirectory == null ) // this directory is not found 
+                        {
+                            Console.WriteLine($"this path \"{destinition_Name}\" does not exist on your disk!");
+                            return;
+                        }
+                        else // if we found directory 
+                        {
+                            // first we need to search this file if found or not in this directory or not 
+
+                            int index_File_Destinition = targetDirectory.search_Directory(source_Name);
+                            if(index_File_Destinition == -1) // this mean this file not found in destinition 
+                            {
+                                // so we now will copy this file here 
+                                Directory_Entry Dire_Or_Files = Program.currentDirectory.DirectoryTable[index]; // get index of source file we need to copy it 
+                                File_Entry file_Copied = new File_Entry(Dire_Or_Files, Program.currentDirectory);
+                                File_Entry.Copy_CreateFile(file_Copied, destinition_Name);
+                                return;
+                            }
+                            else // we found this file in this destinition directory 
+                            {
+                                // so ask user if want to overwrite this file or not 
+                                Directory_Entry Dire_Or_Files = Program.currentDirectory.DirectoryTable[index]; // get index of source file we need to copy it 
+                                File_Entry file_Copied = new File_Entry(Dire_Or_Files, Program.currentDirectory);
+                                File_Entry.OverWrite(file_Copied, source_Name, destinition_Name);
+                                return;
+                            }
+                        }
+
+                    }
+                    else if(destinition_Name.Contains(".")) // here else for destinition without fullpath but to file  
+                    {
+                        int index_Destinition = Program.currentDirectory.search_Directory(destinition_Name);
+                        Directory_Entry Dire_OR_Files = Program.currentDirectory.DirectoryTable[index];
+                        File_Entry file_Copied = new File_Entry(Dire_OR_Files, Program.currentDirectory);
+                        if (index_Destinition == -1) // here we don't found File so copy it 
+                        {
+                            File_Entry.Copy_CreateFile(file_Copied, destinition_Name);
+                            return;
+                        }
+                        else // here is file is found 
+                        {
+                            // so ask user for if he want to overwrite this file or not 
+                            // get name of Dirctory of this file
+                            string name_Of_Directory_Destinition = new string(Program.currentDirectory.Dir_Namee);
+                            File_Entry.OverWrite(file_Copied, destinition_Name, name_Of_Directory_Destinition);
+                        }
+
+                    }
+                    else // this mean destinition is directory 
+                    {
+                        Directory targetDirectory = MoveToDir(destinition_Name, Program.currentDirectory);
+                        if(targetDirectory != null) // directory is found so check if this file with same name is found or nor 
+                        {
+                            int index_Destinition_File = targetDirectory.search_Directory(source_Name);
+                            if(index_Destinition_File == -1) // this is mean file does not exist so copy it 
+                            {
+                                Directory_Entry Dire_Or_Files = Program.currentDirectory.DirectoryTable[index];
+                                File_Entry file_Copied = new File_Entry(Dire_Or_Files, Program.currentDirectory);
+                                File_Entry.Copy_CreateFile(file_Copied, destinition_Name);
+                                return;
+                            }
+                            else // this mean file is found so ask user if want overwrite it 
+                            {
+                                Directory_Entry Dire_Or_Files = targetDirectory.DirectoryTable[index_Destinition_File];
+                                File_Entry file_Copied = new File_Entry(Dire_Or_Files, targetDirectory);
+                                File_Entry.OverWrite(file_Copied, source_Name, destinition_Name);
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"this path \"{destinition_Name}\" does not exist on your disk!");
+                            return;
+                        }
+                    }
+
+                }
             }
         }
     }
