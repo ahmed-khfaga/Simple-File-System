@@ -47,7 +47,7 @@ namespace OS_Simple_Shell
             }
             return size;
         }
-        public bool Can_Add_Entry(Directory d)
+        public bool Can_Add_Entry(Directory_Entry d)
         {
             bool can = false;
             int needed_Size = (DirectoryTable.Count + 1) * 32;
@@ -127,7 +127,6 @@ namespace OS_Simple_Shell
 
             if (this.dir_First_Cluster != 0)
             {
-
                 cluster_Index = this.dir_First_Cluster;
             }
             else
@@ -135,9 +134,7 @@ namespace OS_Simple_Shell
                 cluster_Index = Mini_FAT.get_Availabel_Cluster();
                 this.dir_First_Cluster = cluster_Index;
             }
-
             int last_Cluster = -1;
-
             for (int i = 0; i < bytes.Count; i++)
             {
 
@@ -196,7 +193,7 @@ namespace OS_Simple_Shell
 
             for (int i = 0; i < DirectoryTable.Count; i++)
             {
-                string dirNameInTable = new string(DirectoryTable[i].Dir_Namee.Where(c => c != '\0').ToArray()).Trim();
+                string dirNameInTable = new string(DirectoryTable[i].Dir_Namee).Trim('\0');
                 if (name.Contains("\0"))
                 {
                     name = name.Replace("\0", " ");

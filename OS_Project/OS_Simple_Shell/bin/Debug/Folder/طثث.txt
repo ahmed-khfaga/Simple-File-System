@@ -1,0 +1,153 @@
+#include "Bank.h"
+#include <iostream>
+
+using namespace std;
+
+// Function to create a new account
+void Bank::createAccount(const string& name, int accNumber)
+{
+    Account* acc = new Account(name, accNumber);
+    Node* newNode = new Node{ acc, first };
+    first = newNode;
+
+    cout << "Account Created Successfully \nYour Account Number is: " << acc->getAccountNumber() << endl;
+}
+// Function to create multiple accounts
+void Bank::createMultipleAccounts(int startAccNumber)
+{
+    for (int i = 0; i < 10; ++i)
+    {
+        string name = "User" + to_string(startAccNumber + i);
+        createAccount(name, startAccNumber + i);
+    }
+}
+
+// Function to delete an account
+int Bank::deleteAccount(int accNumber)
+{
+    Node* p = first;
+    Node* q = NULL;
+
+    while (p != NULL)
+    {
+        if (p->account->getAccountNumber() == accNumber)
+        {
+            if (q == NULL)
+            {
+                first = p->next;
+            }
+            else
+            {
+                q->next = p->next;
+            }
+            delete p->account;
+            delete p;
+
+            cout << "Account: " << accNumber << " is deleted\n";
+            return 1;
+        }
+        q = p;
+        p = p->next;
+    }
+    return -1;
+}
+
+// Function to deposit money into an account
+void Bank::depositAccount(int accNumber, double amount)
+{
+    Node* current = first;
+    while (current != NULL)
+    {
+        if (current->account->getAccountNumber() == accNumber)
+        {
+            current->account->deposit(amount); // Changed from depoist to deposit
+            cout << "Deposit Successful ... \n";
+            return;
+        }
+        current = current->next;
+    }
+}
+
+// Function to withdraw money from an account
+void Bank::withdrawAccount(int accNumber, double amount)
+{
+    Node* withdraw = first;
+    while (withdraw != NULL)
+    {
+        if (withdraw->account->getAccountNumber() == accNumber)
+        {
+            withdraw->account->withdraw(amount);
+            return;
+        }
+        withdraw = withdraw->next;
+    }
+}
+
+// Function to check the balance of an account
+void Bank::checkBalance(int accNumber) const
+{
+    Node* check = first;
+    while (check != NULL)
+    {
+        if (check->account->getAccountNumber() == accNumber)
+        {
+            cout << "Your Account Balance is: " << check->account->getBalance() << " $\n";
+            return;
+        }
+        check = check->next;
+    }
+}
+
+// Function to check if an account exists
+bool Bank::checkAccount(int accNumber) const
+{
+    Node* p = first;
+    while (p != NULL)
+    {
+        if (p->account->getAccountNumber() == accNumber)
+        {
+            return true;
+        }
+        p = p->next;
+    }
+    return false;
+}
+
+// Function to show all accounts
+void Bank::showAllAccounts() const
+{
+    Node* p = first;
+    while (p != NULL)
+    {
+        cout << "Name: " << p->account->getName() << "\tAccount Number: " << p->account->getAccountNumber() << "\tYour Balance: "
+        << p->account->getBalance() << " $" << endl;
+        p = p->next;
+    }
+    cout << "No Account .... \n";
+}
+
+// Function to delete all accounts
+void Bank::deleteAllAccounts()
+{
+    Node* p = first;
+    while (p != NULL)
+    {
+        Node* nextNode = p->next;
+        delete p->account;
+        delete p;
+        p = nextNode;
+    }
+    first = NULL; 
+    cout << "All Accounts have been deleted.\n";
+}
+void Bank::countAccounts()
+{
+    Node* p = first;
+    int count = 0;
+    while (p != NULL)
+    {
+        count++;
+        p = p->next;
+    }
+    cout << "Accounts in Bank are : " << count << endl;
+}

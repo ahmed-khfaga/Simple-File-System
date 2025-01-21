@@ -1,0 +1,24 @@
+ 
+int T; cin>>T;
+while(T--)
+   {
+		double N;cin >> N;
+		int in = N;
+		while(N)
+		{
+    			float op = N / 2;
+    			int in = op;
+    			float Int_Or_Float = op - in;
+    			int i = 0, A[1000];
+   			 if (Int_Or_Float == 0.5)
+   			 {
+       			 	A[i] = 1;
+       			 	i++;
+  			 }
+			for(int j=0;j<i;j++)
+			{
+				cout<<A[j]<<" ";
+			}
+		}
+   		
+    }

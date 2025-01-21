@@ -1,0 +1,35 @@
+#include <iostream>
+using namespace std;
+
+int main()
+{
+
+    float numbers[]={1.1f,2.2f,3.3f,4.4f,5.5f};
+    float *ptr=numbers; // ptr points to first element of array ;
+
+    cout<<"Original Array : [ ";
+    for(int i=0;i<5;i++)
+    {
+        cout<<numbers[i]<<" ";
+    }
+    cout<<"]"<<endl;
+
+    // Original Array =[ 1.1 2.2 3.3 4.4 5.5 ];
+
+    *ptr *=2.0f;   // first element = 2.2 ;
+     ptr++;       // move to next element 2.2f ;
+    *ptr +=1.0f;  // change value of second element 2.2f to 3.2f ;
+     ptr +=2;    // move to fourth element 4.4 ;
+    *ptr -=1.5f; // change value of 4.4 to 2.9 ;
+
+     cout<<"Modified Array : [ ";
+     for(int i=0;i<5;i++)
+     {
+         cout<<numbers[i]<<" ";
+     }
+     cout<<"]"<<endl;
+
+     // Modified Array = [ 2.2 3.2 3.3 2.9 5.5 ];
+
+    return 0;
+}

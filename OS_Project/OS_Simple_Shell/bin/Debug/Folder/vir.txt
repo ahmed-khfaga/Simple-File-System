@@ -1,0 +1,103 @@
+using System;
+using System.IO;
+
+class VirtualDisk
+{
+    private string diskFileName;  // اسم ملف الفيرتشوال ديسك
+    private bool isNewFile;       // لمعرفة إذا كان الملف جديد
+    private const int clusterSize = 1024;  // حجم الكلاستر 1024 بايت
+
+    public VirtualDisk(string name)
+    {
+        diskFileName = name;
+
+        // تحقق إذا كان الملف موجوداً
+        if (!File.Exists(diskFileName))
+        {
+            Console.WriteLine("Creating a new file");
+            File.Create(diskFileName).Close();
+            isNewFile = true;  // وضع علامة أن الملف جديد
+        }
+        else
+        {
+            Console.WriteLine("Opening existing file");
+            isNewFile = false; // الملف موجود مسبقاً
+        }
+    }
+
+    // الكتابة على مستوى الكلاستر بدون ملء المساحة الفارغة
+    public void WriteData(string data)
+    {
+        byte[] dataBytes = System.Text.Encoding.UTF8.GetBytes(data);  // تحويل النص إلى بايتات
+
+        using (FileStream fileStream = new FileStream(diskFileName, FileMode.Append))
+        {
+            fileStream.Write(dataBytes, 0, dataBytes.Length); // كتابة البيانات فقط دون ملء الكلاستر
+            Console.WriteLine($"{dataBytes.Length} bytes written to disk.");
+        }
+    }
+
+    // القراءة من الملف
+    public string ReadData()
+    {
+        using (FileStream fileStream = new FileStream(diskFileName, FileMode.Open))
+        {
+            byte[] dataBytes = new byte[fileStream.Length];
+            fileStream.Read(dataBytes, 0, dataBytes.Length);
+
+            // تحويل البيانات إلى نص
+            string data = System.Text.Encoding.UTF8.GetString(dataBytes);
+            return data.TrimEnd('\0'); // إزالة أي بايتات فارغة
+        }
+    }
+
+    // حجم الفيرتشوال ديسك
+    public long GetFileSize()
+    {
+        FileInfo fileInfo = new FileInfo(diskFileName);
+        return fileInfo.Length;  // حجم الملف بالبايت
+    }
+
+    // حساب عدد الكلاسترز المستخدمة بناءً على حجم البيانات الفعلي
+    public long GetUsedClusters()
+    {
+        return (GetFileSize() + clusterSize - 1) / clusterSize;  // حساب عدد الكلاسترز المستخدمة بدقة
+    }
+
+    // التحقق إذا كان الملف جديد
+    public bool IsNew()
+    {
+        return isNewFile;
+    }
+}
+
+class Program
+{
+    static void Main()
+    {
+        // إنشاء أو فتح الفيرتشوال ديسك
+        VirtualDisk vDisk = new VirtualDisk("virtual_disk.txt");
+
+        // مطالبة المستخدم بإدخال بيانات
+        Console.WriteLine("Please enter the data to write to the virtual disk:");
+        string userInput = Console.ReadLine(); // قراءة مدخل المستخدم
+
+        // كتابة بيانات المستخدم في الفيرتشوال ديسك
+        vDisk.WriteData(userInput);
+
+        // قراءة البيانات من الفيرتشوال ديسك
+        string diskContent = vDisk.ReadData();
+        Console.WriteLine("Content of the virtual disk:\n" + diskContent);
+
+        // عرض حجم الفيرتشوال ديسك
+        long diskSize = vDisk.GetFileSize();
+        Console.WriteLine("Virtual disk size: " + diskSize + " bytes");
+
+        // عرض عدد الكلاسترز المستخدمة
+        long usedClusters = vDisk.GetUsedClusters();
+        Console.WriteLine("Used clusters: " + usedClusters);
+
+        // التحقق إذا كان الملف جديد
+        Console.WriteLine("Was the virtual disk newly created? " + vDisk.IsNew());
+    }
+}

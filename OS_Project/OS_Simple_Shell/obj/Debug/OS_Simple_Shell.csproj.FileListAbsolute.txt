@@ -12,3 +12,10 @@ D:\update os\OS_Project\OS_Simple_Shell\obj\Debug\OS_Simple_Shell.csproj.Assembl
 D:\update os\OS_Project\OS_Simple_Shell\obj\Debug\OS_Simple_Shell.csproj.CoreCompileInputs.cache
 D:\update os\OS_Project\OS_Simple_Shell\obj\Debug\OS_Simple_Shell.exe
 D:\update os\OS_Project\OS_Simple_Shell\obj\Debug\OS_Simple_Shell.pdb
+D:\ReboForMyBrother\OS_Project\OS_Simple_Shell\bin\Debug\OS_Simple_Shell.exe.config
+D:\ReboForMyBrother\OS_Project\OS_Simple_Shell\bin\Debug\OS_Simple_Shell.exe
+D:\ReboForMyBrother\OS_Project\OS_Simple_Shell\bin\Debug\OS_Simple_Shell.pdb
+D:\ReboForMyBrother\OS_Project\OS_Simple_Shell\obj\Debug\OS_Simple_Shell.csproj.AssemblyReference.cache
+D:\ReboForMyBrother\OS_Project\OS_Simple_Shell\obj\Debug\OS_Simple_Shell.csproj.CoreCompileInputs.cache
+D:\ReboForMyBrother\OS_Project\OS_Simple_Shell\obj\Debug\OS_Simple_Shell.exe
+D:\ReboForMyBrother\OS_Project\OS_Simple_Shell\obj\Debug\OS_Simple_Shell.pdb

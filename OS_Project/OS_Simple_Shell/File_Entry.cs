@@ -66,8 +66,7 @@ namespace OS_Simple_Shell
                 List<byte[]> bytesls = Converter.SplitBytes(contentBYTES);
                 int cluster_FAT_Index;
                 if (dir_First_Cluster != 0)
-                {
-
+                {                    
                     cluster_FAT_Index = dir_First_Cluster;
                 }
                 else
@@ -122,7 +121,6 @@ namespace OS_Simple_Shell
                     clusterIndex = next;
                     if (clusterIndex != -1)
                     {
-                        ls.AddRange(Virtual_Disk.read_Cluster(clusterIndex));
                         next = Mini_FAT.getNext(clusterIndex);
                     }
                 } while (clusterIndex != -1);
@@ -170,7 +168,7 @@ namespace OS_Simple_Shell
             {
                 int last_index_for_name = name.LastIndexOf("\\");
                 string name_of_Directory = name.Substring(0, last_index_for_name); // get fullpath of parent of this file 
-                Directory targetDirectory = ParserClass.MoveToDir(name_of_Directory, Program.currentDirectory); // move to this directory
+                Directory targetDirectory = ExecutionClass.MoveToDir(name_of_Directory, Program.currentDirectory); // move to this directory
                 string name_Of_File = name.Substring(last_index_for_name + 1); // get name of File 
                 if (targetDirectory == null) // this is mean directory is null and path is error
                 {
@@ -183,19 +181,26 @@ namespace OS_Simple_Shell
                     int first_Cluster = Mini_FAT.get_Availabel_Cluster(); // get free cluster to this file we want to copy it.
                     int counter = 0; // counter to count file are copied .
                     File_Entry File_are_copied = new File_Entry(name_Of_File.ToCharArray(), file_path.dir_Attr, first_Cluster, file_path.dir_FileSize, targetDirectory, file_path.content); // this is File are Copied .
-                    File_are_copied.Write_File_Content(); // write this file and ensure FAT table save this data .
-                    targetDirectory.DirectoryTable.Add(File_are_copied); // add this file in Directoy Table .
-                    counter++;
-                    targetDirectory.Write_Directory();
-                    Console.WriteLine($"{new string(targetDirectory.Dir_Namee)+"\\"+name_Of_File}");
-                    Console.WriteLine($"{counter} file(s) copied.");
-
+                    if(targetDirectory.Can_Add_Entry(File_are_copied.GetDirectory_Entry()))
+                    {
+                        File_are_copied.Write_File_Content(); // write this file and ensure FAT table save this data .
+                        targetDirectory.DirectoryTable.Add(File_are_copied); // add this file in Directoy Table .
+                        counter++;
+                        targetDirectory.Write_Directory();
+                        Console.WriteLine($"{new string(targetDirectory.Dir_Namee) + "\\" + name_Of_File}");
+                        Console.WriteLine($"{counter} file(s) copied.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("No space on disk to copy this file!");
+                        return;
+                    }
                 }
             }
             else if(!name.Contains("."))
             {
                  // get fullpath of parent of this file 
-                Directory targetDirectory = ParserClass.MoveToDir(name, Program.currentDirectory); // move to this directory
+                Directory targetDirectory = ExecutionClass.MoveToDir(name, Program.currentDirectory); // move to this directory
                 if (targetDirectory == null) // this is mean directory is null and path is error
                 {
                     Console.WriteLine($"this path \"{name}\" does not exist on your disk!");
@@ -207,12 +212,19 @@ namespace OS_Simple_Shell
                     int first_Cluster = Mini_FAT.get_Availabel_Cluster(); // get free cluster to this file we want to copy it.
                     int counter = 0; // counter to count file are copied .
                     File_Entry File_are_copied = new File_Entry(file_path.Dir_Namee, file_path.dir_Attr, first_Cluster, file_path.dir_FileSize, targetDirectory, file_path.content); // this is File are Copied .
-                    File_are_copied.Write_File_Content(); // write this file and ensure FAT table save this data .
-                    targetDirectory.DirectoryTable.Add(File_are_copied); // add this file in Directoy Table .
-                    counter++;
-                    targetDirectory.Write_Directory();
-                    Console.WriteLine($"{counter} file(s) copied.");
-
+                    if (targetDirectory.Can_Add_Entry(File_are_copied.GetDirectory_Entry()))
+                    {
+                        File_are_copied.Write_File_Content(); // write this file and ensure FAT table save this data .
+                        targetDirectory.DirectoryTable.Add(File_are_copied); // add this file in Directoy Table .
+                        counter++;
+                        targetDirectory.Write_Directory();
+                        Console.WriteLine($"{counter} file(s) copied.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("No space on disk to copy this file!");
+                        return;
+                    }                   
                 }
             }
             else if(name.Contains("."))
@@ -221,11 +233,19 @@ namespace OS_Simple_Shell
                 int first_Cluster = Mini_FAT.get_Availabel_Cluster(); // get free cluster to this file we want to copy it.
                 int counter = 0; // counter to count file are copied .
                 File_Entry File_are_copied = new File_Entry(name.ToCharArray(), file_path.dir_Attr, first_Cluster, file_path.dir_FileSize, Program.currentDirectory, file_path.content); // this is File are Copied .
-                File_are_copied.Write_File_Content(); // write this file and ensure FAT table save this data .
-                Program.currentDirectory.DirectoryTable.Add(File_are_copied); // add this file in Directoy Table .
-                counter++;
-                Program.currentDirectory.Write_Directory();
-                Console.WriteLine($"{counter} file(s) copied.");
+                if(Program.currentDirectory.Can_Add_Entry(File_are_copied.GetDirectory_Entry()))
+                {
+                    File_are_copied.Write_File_Content(); // write this file and ensure FAT table save this data .
+                    Program.currentDirectory.DirectoryTable.Add(File_are_copied); // add this file in Directoy Table .
+                    counter++;
+                    Program.currentDirectory.Write_Directory();
+                    Console.WriteLine($"{counter} file(s) copied.");
+                }
+                else
+                {
+                    Console.WriteLine("No space on disk to copy this file!");
+                    return;
+                }             
             }          
         }
        
@@ -238,7 +258,7 @@ namespace OS_Simple_Shell
                 int last_index_for_name_Dir = destinationPath.LastIndexOf("\\");
 
                 string name_Of_Dir = destinationPath.Substring(0, last_index_for_name_Dir);
-                targetDirectory = ParserClass.MoveToDir(name_Of_Dir, Program.currentDirectory);
+                targetDirectory = ExecutionClass.MoveToDir(name_Of_Dir, Program.currentDirectory);
                 file.Read_File_Content();
                 int index = targetDirectory.search_Directory(destinationFileName);
 
@@ -274,7 +294,7 @@ namespace OS_Simple_Shell
             }
             else if (destinationPath.Contains("\\") && !destinationPath.Contains("."))
             {
-                targetDirectory = ParserClass.MoveToDir(destinationPath, Program.currentDirectory);
+                targetDirectory = ExecutionClass.MoveToDir(destinationPath, Program.currentDirectory);
                 file.Read_File_Content();
                 int index = targetDirectory.search_Directory(destinationFileName);
 
@@ -344,7 +364,7 @@ namespace OS_Simple_Shell
             }
             else // for only directory 
             {
-                targetDirectory = ParserClass.MoveToDir(destinationPath, Program.currentDirectory);
+                targetDirectory = ExecutionClass.MoveToDir(destinationPath, Program.currentDirectory);
                 file.Read_File_Content();
                 int index = targetDirectory.search_Directory(destinationFileName);
                 Console.WriteLine($"this file \"{destinationFileName}\" is already exist on your disk!");
@@ -379,6 +399,7 @@ namespace OS_Simple_Shell
 
             }           
         }
+         // for export file
         public static bool CheckerMethod(string physical_DISK)
         {
             if (physical_DISK.Contains("\\") && physical_DISK.Contains("."))
@@ -393,7 +414,20 @@ namespace OS_Simple_Shell
                 {
                     return false;
                 }
-            }            
+            }
+            else if(physical_DISK.Contains("\\") && !physical_DISK.Contains("."))
+            {
+                int last_Index_For_Directory_In_Physical = physical_DISK.LastIndexOf("\\");
+                string name_Of_Directory_In_Physical = physical_DISK.Substring(0, last_Index_For_Directory_In_Physical);
+                if (System.IO.Directory.Exists(name_Of_Directory_In_Physical))
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
             else
             {
                 return false ;

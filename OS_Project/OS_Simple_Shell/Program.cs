@@ -10,7 +10,7 @@ namespace OS_Simple_Shell
     internal class Program
     {
         public static Directory currentDirectory;
-        public static string path = "disk2";
+        public static string path = "DD";
         static void Main(string[] args)
         {
             Console.WriteLine("Welcome to OS_Project_Virtual_DISK_shell ^_^ ");
@@ -24,7 +24,7 @@ namespace OS_Simple_Shell
             {
                 Console.Write(path + ">>");
                 string Command = Console.ReadLine();
-                Command_Line command = new Command_Line(Command);
+                Command_Line command = new Command_Line(Command.Trim());
             }
         }
     }

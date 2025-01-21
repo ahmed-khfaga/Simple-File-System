@@ -41,12 +41,10 @@ namespace OS_Simple_Shell
                 string[] parts = fullName.Split('.');
                 string name = parts[0];
                 string extension = parts[1];
-
                 if (name.Length > 7)
                 {
                     name = name.Substring(0, 7);
                 }
-
                 if (extension.Length > 3)
                 {
                     extension = extension.Substring(0, 3);
@@ -54,8 +52,6 @@ namespace OS_Simple_Shell
 
                 string finalName = name + "." + extension;
                 Array.Copy(finalName.PadRight(11, '\0').ToCharArray(), Dir_Namee, 11);
-
-
                 dir_Attr = 0x0;  // File attribute
             }
             else  // It's a directory
@@ -64,8 +60,6 @@ namespace OS_Simple_Shell
                     fullName = fullName.Substring(0, 11); // Truncate
 
                 Array.Copy(fullName.PadRight(11, '\0').ToCharArray(), Dir_Namee, 11);
-
-
                 dir_Attr = 0x10; // Directory attribute
             }
         }

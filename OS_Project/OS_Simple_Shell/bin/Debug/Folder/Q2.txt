@@ -1,0 +1,73 @@
+#include<iostream>
+#include <cstdlib>
+using namespace std;
+
+const int MAX = 1000;
+//***************************unsorted list*******************
+class Ulist
+{
+private:
+	int arr[MAX];
+	int len;
+public:
+	Ulist()
+	{
+		len = 0;
+	}
+	void insert(int num)
+	{
+		arr[len] = num;
+		len++;
+	}
+	void search(int num, bool& found)
+	{
+		found = false;
+		for (int i = 0; i < len; i++)
+			if (num == arr[i])
+				found = true;
+	}
+	void del(int num)
+	{
+		for (int i = 0; i < len; i++)
+			if (arr[i] == num)
+			{
+				arr[i] = arr[len - 1];
+				len--;
+			}
+	}
+	void makeempty()
+	{
+		len = 0;
+	}
+	int getlen()
+	{
+		return len;
+	}
+	bool isfull()
+	{
+		return len == MAX;
+	}
+	void display()
+	{
+		cout << "*********\n";
+		cout << "List is : " << endl;
+		for (int i = 0; i < len; i++)
+			cout << arr[i] << endl;
+		cout << "*********\n";
+	}
+};
+int main()
+{
+	int N = 100;
+	Ulist l;
+	for (int i = 0; i < MAX; i++)
+	{
+		int x = rand() % N;
+		l.insert(x);
+
+	}
+	l.display();
+
+
+
+}

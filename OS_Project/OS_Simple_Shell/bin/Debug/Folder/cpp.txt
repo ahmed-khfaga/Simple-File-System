@@ -1,0 +1,26 @@
+	time_t start, end;
+
+	long long count = 0; long long  a; // r = a - n [a/n] a number n =>10 
+
+time(&start); 
+	for (long long i = 1; i <= pow(10, 8); i++)
+	{
+		a = i;
+		while (a)
+		{
+			if (a % 10 == 1)
+			{
+				count++;
+			}
+			a/= 10;
+			
+		}
+
+	}
+	cout << count;
+	cout<<"--------------------------------------------------";
+	time(&end); 
+	double time_taken = double(end - start);
+    cout << "Time taken by program is : " << fixed 
+        << time_taken << setprecision(5); 
+    cout << " sec " << endl; 

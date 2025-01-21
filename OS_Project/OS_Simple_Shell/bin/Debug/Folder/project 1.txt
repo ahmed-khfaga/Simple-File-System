@@ -1,0 +1,32 @@
+<!DOCTYBE html>
+<html>
+ <head>
+  <title>IT-Fundamentals</title>
+
+ </head>
+ <body>
+  <h1>Assiut University</h1>
+  <img src="ninja.jpg">
+  <h3>Background</h3>
+  <p>Assiut University is Iocated in the capital city os Assiut governorate in Upper Egypt.Assiut is the largest city i Upper Egypt and lies about 375assuit map Kilometers south of cairo. The total area of the govoernorate covers 1553 aquare Kilometers,of which the city of Assuit occupiess around 23 aq Km.</p>
+  <p>At the begining of the university,it has the following<strong> <ins>faculties </ins>:</strong></p>
+  <ol>
+   <li>Faculty of Science. </li>
+   <li>Faculty of Engineering. </li> 
+   <li>Faculty of Areiculture. </li>
+   <li>Faculty of Medicine. </li>
+  </ol>
+  <p>Faculty of science was contain the following departments: </p>
+  <ul>
+    <li>Department of Physic. </li>
+    <li>Department of Mathematics.</li>
+  </ul>
+  <p>By the way, we can defind the two departments as : </p>
+  <dl>
+   <dt>Department of Physic</dt>
+    <dd>Is the academic department that is responsible for studing, researching and teaching all the fileds of physics</dd>
+   <dt>Department of Mathematics</dt>
+    <dd>Is the academic department that is responsible for studing, researching and teaching all the fileds of mathematics</dd>
+  </dl>
+ </body>
+</html>

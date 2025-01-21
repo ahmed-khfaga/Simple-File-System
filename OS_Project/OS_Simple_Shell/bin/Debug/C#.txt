@@ -1,0 +1,33 @@
+//A: Setup and stuff you don't want timed
+using System.Diagnostics;
+
+var timer = new Stopwatch();
+timer.Start();
+
+
+var count = 0; var  a=0; // r = a - n [a/n] a number n =>10 
+for (var i = 1; i <= 10; i++)
+{
+    a = i;
+    while (a>0)
+    {
+        if (a%10 == 1)
+        {
+            count++; 
+        }
+        a /= 10;
+
+    }
+
+}
+Console.WriteLine(count);
+
+
+
+
+
+timer.Stop();
+
+TimeSpan timeTaken = timer.Elapsed;
+string foo = "Time taken: " + timeTaken.ToString(@"m\:ss\.0");
+Console.WriteLine(foo);

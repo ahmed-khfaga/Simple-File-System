@@ -75,7 +75,7 @@ namespace OS_Simple_Shell
         public static int get_Availabel_Clusters()
         {
             int counter = 0;
-            for (int i = 5; i < 1024; i++)
+            for (int i = 5; i < FAT.Length; i++)
             {
                 if (FAT[i] == 0)
                 {
@@ -86,7 +86,7 @@ namespace OS_Simple_Shell
         }
         public static int get_Availabel_Cluster()
         {
-            for (int i = 5; i < 1024; i++)
+            for (int i = 5; i < FAT.Length; i++)
             {
                 if (FAT[i] == 0)
                 {

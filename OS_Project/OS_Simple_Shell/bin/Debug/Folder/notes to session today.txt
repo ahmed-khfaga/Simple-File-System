@@ -1,0 +1,7 @@
+the first ->>> navigate to .... 
+the secound ->>> loacal storage ...
+the third =->> gurd to protect the routies direaction  using commmand ng g g <spicifi name > 
+the fourth =->> make interface to show data from object 
+the fifth =->> u can use product!:product; of using product:any = {} as product 
+1950262
+beging from video 4 into fetch,pull ... with git and githup

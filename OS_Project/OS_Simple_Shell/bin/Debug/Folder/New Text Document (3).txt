@@ -1,0 +1,26 @@
+Overview
+This class is designed to handle data conversions for reading and writing to disk, especially for file system data. The main goal is to convert data between different types (like integers to bytes, directories to bytes) and handle clustering data in chunks of 1024 bytes, which is the cluster size for storing on disk.
+
+Summary of Methods
+1- Convert an integer to 4 bytes: This method takes an integer and converts it to an array of 4 bytes using bitwise operations.
+
+2- Convert 4 bytes to an integer: This method takes an array of 4 bytes and converts it back to an integer.
+
+3- Convert an integer array to a byte array: This method takes an array of integers, converts each integer to 4 bytes, and appends these bytes to a new byte array.
+
+4- Convert a byte array to an integer array: This method takes a byte array and converts every set of 4 bytes back to an integer, storing them in an integer array.
+
+5- Split a byte array into clusters of 1024 bytes: This method divides a byte array into chunks (or clusters) of 1024 bytes. If the byte array isn’t a multiple of 1024, it pads the last cluster with zeros to make it a full 1024 bytes.
+
+6- Convert a directory entry to bytes: This method takes a directory entry and converts it to an array of exactly 32 bytes. Each attribute of the directory entry has a defined size (like dir_name is 11 bytes, dir_attr is 1 byte, and so on), so these fields are added to the byte array according to their specified sizes.
+
+7- Convert 32 bytes to a directory entry: This method does the reverse of the previous method: it takes 32 bytes and converts them into a directory entry object by assigning each byte field to the corresponding attribute in the entry.
+
+8- Convert a byte array to an array of directory entries: This method treats every 32 bytes in a byte array as a separate directory entry,  converts each 32-byte segment to a directory entry object, and stores all the entries in an array.
+
+9- Convert an array of directory entries to a byte array: This method converts each directory entry in an array to 32 bytes (using the method from step 6) and appends them to a byte array.
+
+Note
+If you’re using another programming language like Python or C#, you might need additional methods to handle converting strings to bytes and vice versa.
+
+These methods help manage the storage and retrieval of data in a file system that organizes data in clusters, ensuring the data is correctly formatted for efficient reading and writing to disk.

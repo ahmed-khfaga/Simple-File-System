@@ -1,0 +1,138 @@
+package geometriccalculatorgui;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+public class GeometricCalculatorGUI extends JFrame{
+
+    private JComboBox<String> shapeComboBox;
+    private JTextField widthTextField;
+    private JTextField heightTextField;
+    private JTextField sideTextField;
+    private JTextField radiusTextField;
+    private JButton calculateButton;
+    private JLabel resultLabel;
+    
+    public GeometricCalculatorGUI(){
+        setTitle("Geometric Calculator");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new GridLayout(7, 2));
+        shapeComboBox = new JComboBox<>(new String[]{"Rectangle", "Square", "Circle"});
+        widthTextField = new JTextField();
+        heightTextField = new JTextField();
+        sideTextField = new JTextField();
+        radiusTextField = new JTextField();
+        calculateButton = new JButton("Calculate and Display");
+        resultLabel = new JLabel();
+        add(new JLabel("Select Shape:"));
+        add(shapeComboBox);
+        add(new JLabel("Width:"));
+        add(widthTextField);
+        add(new JLabel("Height:"));
+        add(heightTextField);
+        add(new JLabel("Side:"));
+        add(sideTextField);
+        add(new JLabel("Radius:"));
+        add(radiusTextField);
+        add(new JLabel(" "));
+        add(calculateButton);
+        add(new JLabel("Result:"));
+        add(resultLabel);
+        calculateButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+               calculateAndDisplay();
+            }
+        });
+    }
+    private void calculateAndDisplay()
+    {
+        String selectedShape = (String) shapeComboBox.getSelectedItem();
+        double width = parseDouble(widthTextField.getText());
+        double height = parseDouble(heightTextField.getText());
+        double side = parseDouble(sideTextField.getText());
+        double radius = parseDouble(radiusTextField.getText());
+
+        GeometricObject shape = null;
+        switch (selectedShape) {
+            case "Rectangle":
+                shape = new Rectangle(width, height);
+                break;
+            case "Square":
+                shape = new Square(side);
+                break;
+            case "Circle":
+                shape = new Circle(radius);
+                break;
+            default:
+                resultLabel.setText("Invalid shape selection");
+                return;
+        }
+        if (shape != null) {
+            resultLabel.setText("Area: " + shape.calculateArea() + ", Perimeter: " + shape.calculatePerimeter());
+        }
+    }
+    private double parseDouble(String text) {
+        try {
+            return Double.parseDouble(text);
+        } catch (NumberFormatException e) {
+            return 0.0; // Default value if parsing fails
+        }
+    }
+    public static void main(String[] args) {
+       SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                GeometricCalculatorGUI calculatorGUI = new GeometricCalculatorGUI();
+                calculatorGUI.setSize(400, 250);
+                calculatorGUI.setVisible(true);
+            }
+        });
+    }
+    }
+
+abstract class GeometricObject {
+    abstract double calculateArea();
+    abstract double calculatePerimeter();
+    
+}
+
+class Rectangle extends GeometricObject {
+    private double width;
+    private double height;
+
+    public Rectangle(double width, double height) {
+        this.width = width;
+        this.height = height;
+    }
+ @Override
+    public double calculateArea() {
+        return width * height;
+    }
+@Override
+    public double calculatePerimeter() {
+        return 2 * (width + height);
+    }
+}
+
+class Square extends Rectangle {
+    public Square(double side) {
+        super(side, side);
+    }
+}
+
+class Circle extends GeometricObject {
+    private double radius;
+
+    public Circle(double radius) {
+        this.radius = radius;
+    }
+ @Override
+    public double calculateArea() {
+        return Math.PI * radius * radius;
+    }
+@Override
+    public double calculatePerimeter() {
+        return 2 * Math.PI * radius;
+    }
+}

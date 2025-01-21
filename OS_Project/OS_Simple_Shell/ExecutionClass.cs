@@ -8,10 +8,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
-
 namespace OS_Simple_Shell
 {
-    internal class ParserClass
+    internal class ExecutionClass
     {
         public static Directory MoveToDir(string fullPath, Directory currentDirectory)
         {
@@ -21,11 +20,8 @@ namespace OS_Simple_Shell
                 return null;
             }
             Directory targetDirectory = currentDirectory;
-            string s = new string(currentDirectory.Dir_Namee);
-            if (s.Contains("\0"))
-                s = s.Replace("\0", " ");
-            s = s.Trim();
-            if (parts[0].Equals(s.Trim('\0'), StringComparison.OrdinalIgnoreCase))
+            string name_OF_Target = new string(currentDirectory.Dir_Namee).Trim('\0');           
+            if (parts[0].Equals(name_OF_Target, StringComparison.OrdinalIgnoreCase)) 
             {
                 parts = parts.Skip(1).ToArray();
             }
@@ -53,7 +49,7 @@ namespace OS_Simple_Shell
         public static File_Entry MoveToFile(string fullPath)
         {
             int lastSlashIndex = fullPath.LastIndexOf('\\');
-            if (lastSlashIndex == -1)
+            if (lastSlashIndex == -1) // if no path 
             {
                 return null;
             }
@@ -71,10 +67,10 @@ namespace OS_Simple_Shell
                 return null;
             }
             Directory_Entry fileEntry = parentDirectory.DirectoryTable[index];
-            File_Entry e = new File_Entry(fileEntry, Program.currentDirectory);
-            File_Entry file = new File_Entry(e.Dir_Namee, e.dir_Attr, e.dir_First_Cluster, e.dir_FileSize, parentDirectory, e.content);
+            File_Entry file = new File_Entry(fileEntry, Program.currentDirectory);
             return file;
         }
+        // helper method for import Files to Virtual_Disk_Directory
         private static bool ImportFileToDirectory(string fileName, string fileContent, Directory targetDirectory)
         {
             // Clean up content if necessary
@@ -87,18 +83,27 @@ namespace OS_Simple_Shell
             int firstCluster = Mini_FAT.get_Availabel_Cluster();
             // Create File_Entry object
             File_Entry importedFile = new File_Entry(fileName.ToCharArray(), 0x0, firstCluster, fileSize, targetDirectory, fileContent);
-            importedFile.Write_File_Content();
-            // Create a Directory_Entry and add to the directory table
-            Directory_Entry entry = new Directory_Entry(importedFile.Dir_Namee, importedFile.dir_Attr, importedFile.dir_First_Cluster, importedFile.dir_FileSize);
-            targetDirectory.DirectoryTable.Add(entry);
-            targetDirectory.Write_Directory();
-            // Update the parent directory content if applicable
-            if (targetDirectory.Parent != null)
+            if(targetDirectory.Can_Add_Entry(importedFile.GetDirectory_Entry()))
             {
-                targetDirectory.Update_Content(targetDirectory.Get_Directory_Entry(), targetDirectory.Parent.Get_Directory_Entry());
+                importedFile.Write_File_Content();
+                // Create a Directory_Entry and add to the directory table
+                Directory_Entry entry = new Directory_Entry(importedFile.Dir_Namee, importedFile.dir_Attr, importedFile.dir_First_Cluster, importedFile.dir_FileSize);
+                targetDirectory.DirectoryTable.Add(entry);
+                targetDirectory.Write_Directory();
+                // Update the parent directory content
+                if (targetDirectory.Parent != null)
+                {
+                    targetDirectory.Update_Content(targetDirectory.Get_Directory_Entry(), targetDirectory.Parent.Get_Directory_Entry());
+                }
+                return true; // File successfully imported
             }
-            return true; // File successfully imported
+            else
+            {
+                return false;
+            }
+           
         }
+        // helper method for overWrite imported command 
         private static void OverWrite_ImportedFiles(File_Entry file ,string fullpath, string filename)
         {          
             Console.WriteLine($"Error: A file is \"{filename}\" already exists on your disk!");
@@ -131,6 +136,7 @@ namespace OS_Simple_Shell
                 }
             }
         }
+        // helper method for import single files to Virtual_Disk
         private static bool ImportSingleFile(string filePath)
         {
             string[] pathParts = filePath.Split('\\');
@@ -142,36 +148,46 @@ namespace OS_Simple_Shell
             }
             int size = fileContent.Length;
             int index = Program.currentDirectory.search_Directory(fileName);
-            int first_Cluster = Mini_FAT.get_Availabel_Cluster();
-
             if (index == -1) // file not found on my disk
             {
+                int first_Cluster = Mini_FAT.get_Availabel_Cluster();
                 File_Entry file_Imported = new File_Entry(fileName.ToCharArray(), 0, first_Cluster, size, Program.currentDirectory, fileContent);
-                file_Imported.Write_File_Content();
-                Directory_Entry entry = new Directory_Entry(fileName.ToCharArray(), 0x0, file_Imported.dir_First_Cluster, size);
-                Program.currentDirectory.DirectoryTable.Add(entry);
-                Program.currentDirectory.Write_Directory();
-
-                if (Program.currentDirectory.Parent != null)
+                if (Program.currentDirectory.Can_Add_Entry(file_Imported.GetDirectory_Entry())) //  هو بيقولك بتاخد اوبجكت من نوع ديركتوري انتري مش  
                 {
-                    Program.currentDirectory.Update_Content(Program.currentDirectory.Get_Directory_Entry(), Program.currentDirectory.Parent.Get_Directory_Entry());
+                    file_Imported.Write_File_Content();
+                    Directory_Entry entry = new Directory_Entry(fileName.ToCharArray(), 0x0, file_Imported.dir_First_Cluster, size);
+                    Program.currentDirectory.DirectoryTable.Add(entry);
+                    Program.currentDirectory.Write_Directory();
+
+                    if (Program.currentDirectory.Parent != null)
+                    {
+                        Program.currentDirectory.Update_Content(Program.currentDirectory.Get_Directory_Entry(), Program.currentDirectory.Parent.Get_Directory_Entry());
+                    }
+                    return true; // Successfully imported   
                 }
-                return true; // Successfully imported
+                else
+                {
+                    return false;
+                }                                
             }
             else // file found so ask user if want overwrite 
             {
                 Console.WriteLine($"Error: A file is \"{fileName}\" already exists on your disk!");
                 Console.WriteLine($"NOTE : do you want to overwrite this file: \"{fileName}\" , please enter y for Yes n for No!");
+                Directory_Entry entry = Program.currentDirectory.DirectoryTable[index];
+                int first_Cluster = entry.dir_First_Cluster;
+                int file_Size = entry.dir_FileSize;
+                File_Entry file_OverWriteed = new File_Entry(entry.Dir_Namee, 0x0, first_Cluster, file_Size, Program.currentDirectory, "");
                 string answer = Console.ReadLine();
+                int counter = 0;
                 while (answer != "y" || answer != "n")
                 {
                     if (answer == "y")
                     {
-                        File_Entry File_OverWrited = new File_Entry(Program.currentDirectory.DirectoryTable[index], Program.currentDirectory);
-                        File_OverWrited.Read_File_Content();
-                        File_OverWrited.content = fileContent;
-                        File_OverWrited.dir_FileSize = size;
-                        File_OverWrited.Write_File_Content();
+                        file_OverWriteed.content = fileContent;
+                        file_OverWriteed.dir_FileSize = size;
+                        file_OverWriteed.Write_File_Content();
+                        counter++;
                         return true;
                     }
                     if (answer == "n")
@@ -226,6 +242,7 @@ namespace OS_Simple_Shell
                         }
                         else
                         {
+                            Console.WriteLine("No space on disk to imported this file !");
                             return;
                         }
                     }
@@ -255,6 +272,7 @@ namespace OS_Simple_Shell
                         }
                         else
                         {
+                            Console.WriteLine("No space on disk to imported this file !");                            
                             return;
                         }
                     }
@@ -291,6 +309,7 @@ namespace OS_Simple_Shell
                             }
                             else
                             {
+                                Console.WriteLine("No space on disk to imported this file !");                         
                                 return;
                             }
                         }
@@ -326,6 +345,7 @@ namespace OS_Simple_Shell
                             }
                             else
                             {
+                                Console.WriteLine("No space on disk to imported this file !");
                                 return;
                             }
                         }
@@ -358,10 +378,16 @@ namespace OS_Simple_Shell
             {
                 // Import a single file
                 if (ImportSingleFile(fullPath))
-                {
-                    Console.WriteLine(fullPath);
+                {                  
+                    Console.WriteLine(path);
                     importedFileCount++;
                     Console.WriteLine($"\t {importedFileCount} file(s) imported");
+                    return;
+                }
+                else
+                {
+                    Console.WriteLine("No space on disk to imported this file !");
+                    return;
                 }
             }
             else if (System.IO.Directory.Exists(fullPath)) // Bounce
@@ -388,6 +414,7 @@ namespace OS_Simple_Shell
                         Console.WriteLine(f);
                     }
                     Console.WriteLine($"\t{importedFileCount} file(s) imported.");
+                    return;
                 }
             }
             else
@@ -404,29 +431,29 @@ namespace OS_Simple_Shell
             int total_File_Size = 0;
             string name = new string(Program.currentDirectory.Dir_Namee);
             Console.WriteLine($"Directory of {name} is  \n");
-            for (int i = 0; i < Program.currentDirectory.DirectoryTable.Count; i++)
+            for (int i = 0; i < Program.currentDirectory.DirectoryTable.Count; i++) // iterator for counter of DirectoryTable 
             {
                 file_Sizes = 0;
-                if (Program.currentDirectory.DirectoryTable[i].dir_Attr == 0x0)
+                if (Program.currentDirectory.DirectoryTable[i].dir_Attr == 0x0) // if this entry is size 
                 {
                     file_Counter++;
-                    file_Sizes += Program.currentDirectory.DirectoryTable[i].dir_FileSize;
+                    file_Sizes += Program.currentDirectory.DirectoryTable[i].dir_FileSize; // get size 
                     total_File_Size += file_Sizes;
-                    string m = string.Empty;
-                    m += new string(Program.currentDirectory.DirectoryTable[i].Dir_Namee);
-                    Console.WriteLine($"\t\t{file_Sizes}\t\t" + m);
+                    string name_File = string.Empty;
+                    name_File += new string(Program.currentDirectory.DirectoryTable[i].Dir_Namee);
+                    Console.WriteLine($"\t\t{file_Sizes}\t\t" + name_File); // get name of this file and his size 
                 }
-                else if (Program.currentDirectory.DirectoryTable[i].dir_Attr == 0x10) // لو في فولدر 
+                else if (Program.currentDirectory.DirectoryTable[i].dir_Attr == 0x10) // if this entry is Directory 
                 {
-                    folder_Counter++;
-                    string S = new string(Program.currentDirectory.DirectoryTable[i].Dir_Namee);
-                    Console.WriteLine("\t\t<DIR>\t\t" + S.Trim());
+                    folder_Counter++; // increase counter of folder 
+                    string name_Directory = new string(Program.currentDirectory.DirectoryTable[i].Dir_Namee); 
+                    Console.WriteLine("\t\t<DIR>\t\t" + name_Directory.Trim());
                 }
             }
             Console.Write($"\t\t\t{file_Counter} File(s)\t ");
             if (file_Counter > 0)
             {
-                Console.Write(total_File_Size);
+                Console.Write(total_File_Size+" bytes");
                 Console.WriteLine();
             }
             else
@@ -442,7 +469,7 @@ namespace OS_Simple_Shell
             int file_Sizes = 0;
             int total_File_Size = 0;
             int fol = 2;
-            Directory cc = ParserClass.MoveToDir(name, Program.currentDirectory);
+            Directory cc = ExecutionClass.MoveToDir(name, Program.currentDirectory);
             if (cc != null) // this is directory 
             {
                 cc.Read_Directory();
@@ -471,7 +498,7 @@ namespace OS_Simple_Shell
                 Console.Write($"\t\t\t{file_Counter} File(s)\t ");
                 if (file_Counter > 0)
                 {
-                    Console.Write(total_File_Size);
+                    Console.Write(total_File_Size + " bytes");
                     Console.WriteLine();
                 }
                 else
@@ -522,7 +549,7 @@ namespace OS_Simple_Shell
             Console.Write($"\t\t\t{file_Counter} File(s)\t ");
             if (file_Counter > 0)
             {
-                Console.Write(total_File_Size);
+                Console.Write(total_File_Size + " bytes");
                 Console.WriteLine();
             }
             else
@@ -592,7 +619,7 @@ namespace OS_Simple_Shell
             }
             else if (name.StartsWith("..")) // this mean go back to parent  
             {
-                string[] pathParts = name.Split('\\'); // Split the path (extract name & size)
+                string[] pathParts = name.Split('\\'); // Split the path 
                 int length = pathParts.Length; // get length of {..}
                 for (int i = 0; i < length; i++)
                 {
@@ -987,6 +1014,11 @@ namespace OS_Simple_Shell
                         return;
                     }
                 }
+                else // this directory is found so print massage this directory is found 
+                {
+                    Console.WriteLine($"Error : this directory {name} is already exists!");
+                    return;
+                }
             }
         }
         public static void TypeFiles(string name)
@@ -1006,8 +1038,8 @@ namespace OS_Simple_Shell
                 }
                 else // file found so read contend of this file 
                 {
-                    file.Read_File_Content();
-                    file.Print_Content();
+                    file.Read_File_Content(); // read this content 
+                    file.Print_Content(); // print conetent of this file 
                 }
             }
             else
@@ -1295,8 +1327,10 @@ namespace OS_Simple_Shell
                     }
                     else
                     {
-                        File_Entry.OverWrite(file, file_Name, source_name);
+                        Console.WriteLine("can't copy this file onto itself");
                         return;
+                        //File_Entry.OverWrite(file, file_Name, source_name);
+                        //return;
                     }                    
                 }
             }
@@ -1353,13 +1387,8 @@ namespace OS_Simple_Shell
                             else
                             {
                                 File_Entry file = new File_Entry(entry, targetDirectory);
-                                file.Read_File_Content();
-                                int first_Cluster = Mini_FAT.get_Availabel_Cluster();
-                                File_Entry file_copied = new File_Entry(file_Name.ToCharArray(), file.dir_Attr, first_Cluster, file.dir_FileSize, Program.currentDirectory, file.content);
-                                file_copied.Write_File_Content();
+                                File_Entry.Copy_CreateFile(file, file_Name);                               
                                 copied_files++;
-                                Program.currentDirectory.DirectoryTable.Add(file_copied);
-                                Program.currentDirectory.Write_Directory();
                                 string name_Directory = new string(targetDirectory.Dir_Namee) + "\\" + file_Name;
                                 files_copied_list.Add(name_Directory);
                             }
@@ -1435,14 +1464,9 @@ namespace OS_Simple_Shell
                                 }
                                 else // file not found so copy it 
                                 {
-                                    File_Entry f = new File_Entry(entryFiles, targetDirectory);
-                                    f.Read_File_Content();
-                                    int avc = Mini_FAT.get_Availabel_Cluster();
-                                    File_Entry fv2 = new File_Entry(file_Name.ToCharArray(), f.dir_Attr, avc, f.dir_FileSize, Program.currentDirectory, f.content);
-                                    fv2.Write_File_Content();
-                                    copy_files++;
-                                    Program.currentDirectory.DirectoryTable.Add(fv2);
-                                    Program.currentDirectory.Write_Directory();
+                                    File_Entry file = new File_Entry(entryFiles, targetDirectory);
+                                    File_Entry.Copy_CreateFile(file, new string(file.Dir_Namee).Trim('\0'));                                   
+                                    copy_files++;                                   
                                     string name_Directory = new string(targetDirectory.Dir_Namee) + "\\" + file_Name;
                                     files_copied_list.Add(name_Directory);
                                 }
@@ -1460,9 +1484,11 @@ namespace OS_Simple_Shell
                     }
                     else // this is file and file is found so ask user if want to overwrite this file or not 
                     {
-                        File_Entry file_Copied = new File_Entry(entry, Program.currentDirectory);
-                        string name_Of_Directoy = new string(Program.currentDirectory.Dir_Namee);
-                        File_Entry.OverWrite(file_Copied, source_name, name_Of_Directoy);
+                        Console.WriteLine("Can't copy this file onto itself.");
+                        return;
+                        //File_Entry file_Copied = new File_Entry(entry, Program.currentDirectory);
+                        //string name_Of_Directoy = new string(Program.currentDirectory.Dir_Namee);
+                        //File_Entry.OverWrite(file_Copied, source_name, name_Of_Directoy);
                     }
                 }
             }

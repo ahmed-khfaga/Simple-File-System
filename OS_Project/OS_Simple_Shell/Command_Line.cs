@@ -32,9 +32,9 @@ namespace OS_Simple_Shell
             {
                 Console.Clear();
             }
-            else if (command_Array[0].ToLower() == "cd")
+            else if (command_Array[0].ToLower() == "cd") // this is test case (1) we print the current directory
             {
-                Console.WriteLine(Program.currentDirectory.Dir_Namee);
+                Console.WriteLine(Program.currentDirectory.Dir_Namee); 
             }
             else if (string.IsNullOrWhiteSpace(command_Array[0].ToLower()))
             {
@@ -90,7 +90,7 @@ namespace OS_Simple_Shell
             }
             else if (command_Array[0].ToLower() == "dir")
             {
-                ParserClass.Dir(); // for current Directory
+                ExecutionClass.Dir(); // for current Directory
             }
             else
             {
@@ -203,7 +203,7 @@ namespace OS_Simple_Shell
                 if (dname == ".")
                 {
                     // Current directory
-                    ParserClass.Dir_Sup_Dir(true);
+                    ExecutionClass.Dir_Sup_Dir(true);
                     return;
                 }
                 else if (dname == "..")
@@ -223,8 +223,7 @@ namespace OS_Simple_Shell
                         int file_Sizes1 = 0;
                         int total_File_Size1 = 0;
                         Directory cc = d.Parent;
-                        string name_l = new string(cc.Dir_Namee);
-                        Console.WriteLine($"Directory of {name_l} : \n");
+                        Console.WriteLine($"Directory of {Program.path}\\.. : \n");
                         for (int i = 0; i < cc.DirectoryTable.Count; i++)
                         {
                             if (cc.DirectoryTable[i].dir_Attr == 0x0)
@@ -261,12 +260,12 @@ namespace OS_Simple_Shell
                     {
                         Console.WriteLine("Error: Cannot move above the root directory.");
                     }
-
                     return;
                 }
+            
                 else
                 {                   
-                    ParserClass.list_OF_Directory(dname);
+                    ExecutionClass.list_OF_Directory(dname);
                     return;
                 }
             }
@@ -298,7 +297,8 @@ namespace OS_Simple_Shell
                     Console.WriteLine($"Error: Directory name cannot start with \"{dirName[0]}\". Please enter a valid name.");
                     return;
                 }              
-                ParserClass.Make_Directory(dirName);
+                ExecutionClass.Make_Directory(dirName);
+                return;
             }
             // work
             else if (commandArray_2Agr[0].ToLower() == "rd")
@@ -317,28 +317,27 @@ namespace OS_Simple_Shell
                     {
                         continue;
                     }
-                    ParserClass.RemoveDirectory(commandArray_2Agr[i]);
+                    ExecutionClass.RemoveDirectory(commandArray_2Agr[i]);
                 }
             }
             //work xd done with all test case  
             else if (commandArray_2Agr[0].ToLower() == "cd")
             {
-                if (commandArray_2Agr[1].ToLower() == "")
-                    return;
-                ParserClass.ChangeDirectory_v2(commandArray_2Agr[1]);
+                
+                ExecutionClass.ChangeDirectory_v2(commandArray_2Agr[1]);
             }
             // work
             else if (commandArray_2Agr[0].ToLower() == "rename")
             {
-                if (commandArray_2Agr[1] == "" || commandArray_2Agr[2] == "")
+                if(commandArray_2Agr.Length == 3)
                 {
-                    Console.WriteLine("Error :\n-Renames a file. \r\nrename command syntax is \r\nrename [fileName] [new fileName] \r\n[fileName] can be a file name or fullpath of a filename \r\n[new fileName] can be a new file name not fullpath");
-                    return;
+                    ExecutionClass.Rename(commandArray_2Agr[1], commandArray_2Agr[2]);
                 }
                 else
                 {
-                    ParserClass.Rename(commandArray_2Agr[1], commandArray_2Agr[2]);
-                }
+                    Console.WriteLine("Error :\n-Renames a file. \r\nrename command syntax is \r\nrename [fileName] [new fileName] \r\n[fileName] can be a file name or fullpath of a filename \r\n[new fileName] can be a new file name not fullpath");
+                    return;
+                }                                     
             }
             // work          
             else if (commandArray_2Agr[0].ToLower() == "import")
@@ -350,11 +349,11 @@ namespace OS_Simple_Shell
                 }
                 if (commandArray_2Agr.Length == 2)
                 {
-                    ParserClass.Importv2(commandArray_2Agr[1]);
+                    ExecutionClass.Importv2(commandArray_2Agr[1]);
                 }
                 else
                 {
-                    ParserClass.ImportMethod(commandArray_2Agr[1], commandArray_2Agr[2]);
+                    ExecutionClass.ImportMethod(commandArray_2Agr[1], commandArray_2Agr[2]);
                 }
             }
             // work
@@ -367,11 +366,11 @@ namespace OS_Simple_Shell
                 }
                 if (commandArray_2Agr.Length == 2)
                 {
-                    ParserClass.Export_Files(commandArray_2Agr[1]);
+                    ExecutionClass.Export_Files(commandArray_2Agr[1]);
                 }
                 else
                 {
-                    ParserClass.Export_Files(commandArray_2Agr[1], commandArray_2Agr[2]);
+                    ExecutionClass.Export_Files(commandArray_2Agr[1], commandArray_2Agr[2]);
                 }
             }
             //del work done all test case
@@ -387,7 +386,7 @@ namespace OS_Simple_Shell
                     {
                         continue;
                     }
-                    ParserClass.deleteFile(commandArray_2Agr[i]);
+                    ExecutionClass.deleteFile(commandArray_2Agr[i]);
                 }
             }
             // work done all test case
@@ -402,7 +401,7 @@ namespace OS_Simple_Shell
                     }
                     else
                     {
-                        ParserClass.TypeFiles(commandArray_2Agr[1]);
+                        ExecutionClass.TypeFiles(commandArray_2Agr[1]);
                     }
                 }
                 else
@@ -413,12 +412,13 @@ namespace OS_Simple_Shell
                         {
                             continue;
                         }
-                        ParserClass.TypeFiles(commandArray_2Agr[i]);
+                        ExecutionClass.TypeFiles(commandArray_2Agr[i]);
                     }
                 }               
             }
             // work with all test case 
-            else if (commandArray_2Agr[0].ToLower() == "copy")
+            else 
+            if (commandArray_2Agr[0].ToLower() == "copy")
             {                
                 if (commandArray_2Agr[1].ToLower() == "")
                 {
@@ -427,11 +427,11 @@ namespace OS_Simple_Shell
                 }
                 if (commandArray_2Agr.Length == 2)
                 {
-                    ParserClass.Copy_Source(commandArray_2Agr[1]);
+                    ExecutionClass.Copy_Source(commandArray_2Agr[1]);
                 }
                 else
                 {
-                    ParserClass.CopyMethod(commandArray_2Agr[1], commandArray_2Agr[2]);
+                    ExecutionClass.CopyMethod(commandArray_2Agr[1], commandArray_2Agr[2]);
                 }
             }
 

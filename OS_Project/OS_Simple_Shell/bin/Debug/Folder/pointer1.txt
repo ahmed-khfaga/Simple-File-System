@@ -1,0 +1,35 @@
+#include <iostream>
+using namespace std;
+
+int main()
+{
+    char charr[]={'a','b','c','d','e'};
+    char *ptr=charr; //ptr points to first element of the array;
+
+    cout<<"Original Array : [ ";
+    for(int i=0;i<5;i++)
+    {
+        cout<<charr[i]<<" ";
+    }
+    cout<<"]"<<endl;
+
+    // Original Array = ['a','b','c','d','e'];
+
+    *ptr='x'; // change value of first element a to x ;
+    ptr++; // move to second element b ;
+    *ptr='y'; // change value of second element b to y ;
+    ptr +=2; // move to fourth element d ;
+    *ptr='z'; // change value of fourth element d to z ;
+
+    cout<<"Modified Array : [ ";
+    for(int i=0;i<5;i++)
+    {
+        cout<<charr[i]<<" ";
+    }
+    cout<<"]"<<endl;
+
+    // Modified Array = ['x','y','c','z','e'];
+
+
+    return 0;
+}

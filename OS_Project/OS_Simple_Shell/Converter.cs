@@ -64,15 +64,8 @@ namespace OS_Simple_Shell
             return chunks;
         }
         // Converts a string to a array of bytes
-        public static byte[] StringToByteArray(string str)
-        {
-            return Encoding.ASCII.GetBytes(str);
-        }
-        // Convert array of bytes to a string
-        public static string ByteArrayToString(byte[] bytes)
-        {
-            return Encoding.ASCII.GetString(bytes);
-        }
+        public static byte[] StringToByteArray(string str) => Encoding.UTF8.GetBytes(str);
+        public static string ByteArrayToString(byte[] bytes) => Encoding.UTF8.GetString(bytes);
         public static List<byte> Directory_EntryToBytes(Directory_Entry E)
         {
             List<byte> list = new List<byte>(32);
